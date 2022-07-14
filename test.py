@@ -2,7 +2,7 @@ import qimpy as qp
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
-from grid1d import Grid1D
+from grid1d import Grid1D, get1D
 from hard_rods_fmt import HardRodsFMT
 
 
@@ -28,14 +28,11 @@ n = cdft.n
 
 
 # Plot density and potential:
-def get1D(x: torch.tensor) -> np.ndarray:
-    return x[0, 0].to(qp.rc.cpu).numpy()
-
-
-plt.plot(get1D(grid1d.z), get1D(cdft.V.data), label="V")
-plt.plot(get1D(grid1d.z), get1D(n.data), label="n")
-# plt.plot(get1D(grid1d.z), get1D(n.convolve(w0_tilde).data), label="n0")
-# plt.plot(get1D(grid1d.z), get1D(n.convolve(w1_tilde).data), label="n1")
+z1d = get1D(grid1d.z)
+plt.plot(z1d, get1D(cdft.V.data), label="V")
+plt.plot(z1d, get1D(n.data), label="n")
+# plt.plot(z1d, get1D(n.convolve(w0_tilde).data), label="n0")
+# plt.plot(z1d, get1D(n.convolve(w1_tilde).data), label="n1")
 plt.axhline(cdft.n_bulk, color='k', ls='dotted')
 plt.xlabel("z")
 plt.legend()

@@ -46,6 +46,10 @@ class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         """Get current density (from self.logn)"""
         return self.logn.exp()
 
+    @n.setter
+    def n(self, new_n: qp.grid.FieldR) -> None:
+        self.logn = new_n.log()
+
     def set_n_bulk(self, n_bulk: float) -> None:
         """Update the chemical potential to target given bulk density."""
         self.n_bulk = n_bulk

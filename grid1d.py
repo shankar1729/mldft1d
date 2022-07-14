@@ -44,6 +44,10 @@ class Grid1D:
         self.z = r[..., 2]
 
 
+def get1D(x: torch.Tensor) -> np.ndarray:
+    return x[0, 0].to(qp.rc.cpu).numpy()
+
+
 # --- Super hacky stuff that needs to be merged into QimPy ---
 
 def fieldR_log(self: qp.grid.FieldR) -> qp.grid.FieldR:
