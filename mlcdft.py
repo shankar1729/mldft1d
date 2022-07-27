@@ -62,9 +62,9 @@ class MLCDFT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
     def set_n_bulk(self, n_bulk: float) -> None:
         """Update the chemical potential to target given bulk density."""
         self.n_bulk = n_bulk
-        # Bulk free energy density, NEEDS derivative of f_ex(w * n) w.r.t n
-        # Set it to zero to solve for mu
-        # TODO
+        # Bulk condition: (d/dn) f_ex(w * n) = mu
+        w_bulk = self.w(0.)
+        self.mu = self.f_ex.deriv(w_bulk * n_bulk) * w_bulk
 
     def step(self, direction: qp.grid.FieldR, step_size: float) -> None:
         self.logn += step_size * direction
@@ -74,14 +74,14 @@ class MLCDFT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         V_minus_mu = (-self.mu) + self.V
         state.energy["Omega0"] = n ^ (self.T * self.logn + V_minus_mu)  # Ideal-gas part
         # Excess functional:
-        n0 = n.convolve(self.w0_tilde)
-        n1 = n.convolve(self.w1_tilde)
-        state.energy["Fex"] = (-0.5 * self.T) * (n0 ^ (1. - n1).log())
+        w_tilde = self.w(self.grid1d.Gmag)
+        n_bar = n.convolve(w_tilde)
+        state.energy["Fex"] = self.T * self.f_ex(n_bar).integral()
         # Gradient computation:
         if not energy_only:
             n_grad = self.T * (1. + self.logn) + V_minus_mu
-            n_grad += (-0.5 * self.T) * (1. - n1).log().convolve(self.w0_tilde)
-            n_grad += (+0.5 * self.T) * (n0 / (1. - n1)).convolve(self.w1_tilde)
+            n_bar_grad = self.T * self.f_ex.deriv(n_bar)
+            n_grad += n_bar_grad.convolve(w_tilde)
             state.gradient = qp.grid.FieldR(self.grid1d.grid, data=n_grad.data * n.data)
             state.K_gradient = state.gradient
             state.extra = [state.gradient.norm()]
