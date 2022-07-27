@@ -46,37 +46,3 @@ class Grid1D:
 
 def get1D(x: torch.Tensor) -> np.ndarray:
     return x[0, 0].to(qp.rc.cpu).numpy()
-
-
-# --- Super hacky stuff that needs to be merged into QimPy ---
-
-def fieldR_log(self: qp.grid.FieldR) -> qp.grid.FieldR:
-    return qp.grid.FieldR(self.grid, data=self.data.log())
-
-
-def fieldR_exp(self: qp.grid.FieldR) -> qp.grid.FieldR:
-    return qp.grid.FieldR(self.grid, data=self.data.exp())
-
-
-def scalar_rsub(self: qp.grid.FieldR, a: float) -> qp.grid.FieldR:
-    return qp.grid.FieldR(self.grid, data=(a - self.data))
-
-
-def scalar_radd(self: qp.grid.FieldR, a: float) -> qp.grid.FieldR:
-    return qp.grid.FieldR(self.grid, data=(a + self.data))
-
-
-def fieldR_div(self: qp.grid.FieldR, other: qp.grid.FieldR) -> qp.grid.FieldR:
-    return qp.grid.FieldR(self.grid, data=self.data / other.data)
-
-
-def fieldR_convolve(self: qp.grid.FieldR, kernel_tilde: torch.Tensor) -> qp.grid.FieldR:
-    return ~qp.grid.FieldH(self.grid, data=kernel_tilde * (~self).data)
-
-
-qp.grid.FieldR.log = fieldR_log
-qp.grid.FieldR.exp = fieldR_exp
-qp.grid.FieldR.__rsub__ = scalar_rsub
-qp.grid.FieldR.__radd__ = scalar_radd
-qp.grid.FieldR.__truediv__ = fieldR_div
-qp.grid.FieldR.convolve = fieldR_convolve
