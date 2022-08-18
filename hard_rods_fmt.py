@@ -27,6 +27,7 @@ class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
             energy_threshold=1e-9,
             extra_thresholds={"|grad|": 1e-8},
             method="cg",
+            n_consecutive=1,
         )
         self.grid1d = grid1d
         self.R = R
@@ -40,6 +41,7 @@ class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         # Initialize FMT weight functions:
         self.w0_tilde = 2 * (grid1d.Gmag * R).cos()  # F.T. of w0(x) = delta(R-x)
         self.w1_tilde = (2 * R) * (grid1d.Gmag * R).sinc()  # F.T. of w1(x) = theta(R-x)
+
 
     @property
     def n(self) -> qp.grid.FieldR:
