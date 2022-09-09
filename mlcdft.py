@@ -11,7 +11,7 @@ class MLCDFT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
     grid1d: Grid1D
     T: float  #: Temperature
     w: NNFunction  #: Weight functions defining spatial nonlocality
-    f_ex: NNFUnction  #: Free energy density as a function of weighted densities
+    f_ex: NNFunction  #: Free energy density as a function of weighted densities
     n_bulk: float  #: Bulk number density of the fluid
     mu: float  #: Bulk chemical potential
     logn: qp.grid.FieldR  #: State of the classical DFT (effectively local mu)
@@ -63,8 +63,8 @@ class MLCDFT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         """Update the chemical potential to target given bulk density."""
         self.n_bulk = n_bulk
         # Bulk condition: (d/dn) f_ex(w * n) = mu
-        w_bulk = self.w(0.)
-        self.mu = self.f_ex.deriv(w_bulk * n_bulk) * w_bulk
+        w_bulk = self.w(torch.tensor(0.))
+        self.mu = (self.f_ex.deriv(w_bulk * n_bulk) @ w_bulk).item()
 
     def step(self, direction: qp.grid.FieldR, step_size: float) -> None:
         self.logn += step_size * direction
@@ -82,7 +82,7 @@ class MLCDFT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
             n_grad = self.T * (1. + self.logn) + V_minus_mu
             n_bar_grad = self.T * self.f_ex.deriv(n_bar)
             n_grad += n_bar_grad.convolve(w_tilde)
-            state.gradient = qp.grid.FieldR(self.grid1d.grid, data=n_grad.data * n.data)
+            state.gradient = qp.grid.FieldR(n_grad.grid, data=n_grad.data * n.data)
             state.K_gradient = state.gradient
             state.extra = [state.gradient.norm()]
 
