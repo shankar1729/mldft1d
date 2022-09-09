@@ -1,19 +1,9 @@
-import os
-os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
-# os.environ["CUDA_VISIBLE_DEVICES"]
-os.environ["CUDA_VISIBLE_DEVICES"]=""  # works if used before calling torch which seems to initialize the GPU
-
 import qimpy as qp
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
 from grid1d import Grid1D, get1D
 from hard_rods_fmt import HardRodsFMT
-
-torch._C._cuda_getDeviceCount()  # 0 now 
-
-# torch._C._cuda_getDeviceCount()  # 1 
-# torch.cuda.is_available = lambda : False
 
 
 qp.utils.log_config()  # default set up to log from MPI head alone

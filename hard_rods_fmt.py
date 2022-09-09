@@ -14,8 +14,8 @@ class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
     mu: float  #: Bulk chemical potential
     logn: qp.grid.FieldR  #: State of the classical DFT (effectively local mu)
     V: qp.grid.FieldR  #: External potential
-    w0_tilde: qp.grid.FieldR
-    w1_tilde: qp.grid.FieldR
+    w0_tilde: torch.Tensor
+    w1_tilde: torch.Tensor
 
     def __init__(self, grid1d: Grid1D, *, R: float, T: float, n_bulk: float) -> None:
         """Initializes to bulk fluid with no external potential."""
