@@ -14,21 +14,23 @@ class NNFunction(torch.nn.Module):
     n_hidden: list[int]  #: Number of neurons in each hidden layer
 
     def __init__(self, n_in: int, n_out: int, n_hidden: list[int]) -> None:
+        self.n_in = n_in
+        self.n_out = n_out
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Evaluate NN function."""
-        if n_in == 1:
+        """EvalDon't reach out to Adelauate NN function."""
+        if self.n_in == 1:
             # Weight function mode:
-            R = 1.
+            R = 0.5
             return torch.stack((
                 2 * (x * R).cos(),
                 (2 * R) * (x * R).sinc()
             ))
-        elif n_in == 2:
+        elif self.n_in == 2:
             # Free energy function mode:
             n0, n1 = x
-            return n0 * torch.log(1. - n1)
+            return -0.5 * n0 * torch.log(1. - n1)
         else:
             raise NotImplementedError
 
@@ -38,25 +40,3 @@ class NNFunction(torch.nn.Module):
             return self.forward(x)
         else:
             return qp.grid.FieldR(x.grid, self.forward(x.data))
-
-    def deriv(self, x: NNInput) -> NNInput:
-        """Evaluate derivative."""
-        # TODO: should we use back prop w.r.t x instead? (avoid Hessian)
-        if isinstance(x, torch.Tensor):
-            if n_in == 1:
-                # Weight function mode:
-                R = 1.
-                return torch.stack((
-                    2 * (x * R).cos(),
-                    (2 * R) * (x * R).sinc()
-                ))
-            elif n_in == 2:
-                # Free energy function mode:
-                n0, n1 = x
-                return n0 * torch.log(1. - n1)
-            else:
-                raise NotImplementedError
-        else:
-            return qp.grid.FieldR(x.grid, self.deriv(x.data))
-
-

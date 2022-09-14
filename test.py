@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import torch
 from grid1d import Grid1D, get1D
 from hard_rods_fmt import HardRodsFMT
+from mlcdft import MLCDFT
+from nn_function import NNFunction
 
 
 qp.utils.log_config()  # default set up to log from MPI head alone
@@ -11,7 +13,10 @@ qp.log.info("Using QimPy " + qp.__version__)
 qp.rc.init()
 
 grid1d = Grid1D(L=40., dz=0.01)
-cdft = HardRodsFMT(grid1d, R=0.5, T=0.1, n_bulk=0.6)
+#cdft = HardRodsFMT(grid1d, R=0.5, T=0.1, n_bulk=0.6)
+cdft = MLCDFT(grid1d, T=0.1, n_bulk=0.6, w=NNFunction(1, 2, []), f_ex=NNFunction(2, 1, []))
+qp.log.info(f"mu = {cdft.mu}")
+exit()
 
 # Set external potential:
 V0 = 10 * cdft.T

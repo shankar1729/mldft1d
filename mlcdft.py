@@ -35,6 +35,7 @@ class MLCDFT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
             energy_threshold=1e-9,
             extra_thresholds={"|grad|": 1e-8},
             method="cg",
+            n_consecutive=1,
         )
         self.grid1d = grid1d
         self.T = T
@@ -62,9 +63,12 @@ class MLCDFT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
     def set_n_bulk(self, n_bulk: float) -> None:
         """Update the chemical potential to target given bulk density."""
         self.n_bulk = n_bulk
-        # Bulk condition: (d/dn) f_ex(w * n) = mu
+        # Bulk condition: (d/dn) [f_id(n) + f_ex(w * n)] = mu
         w_bulk = self.w(torch.tensor(0.))
-        self.mu = (self.f_ex.deriv(w_bulk * n_bulk) @ w_bulk).item()
+        n = torch.tensor(n_bulk)
+        n.requires_grad = True
+        (self.T * (n * n.log() + self.f_ex(w_bulk * n))).backward()
+        self.mu = n.grad.item()
 
     def step(self, direction: qp.grid.FieldR, step_size: float) -> None:
         self.logn += step_size * direction
