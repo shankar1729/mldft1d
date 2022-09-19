@@ -13,10 +13,9 @@ qp.log.info("Using QimPy " + qp.__version__)
 qp.rc.init()
 
 grid1d = Grid1D(L=40., dz=0.01)
-#cdft = HardRodsFMT(grid1d, R=0.5, T=0.1, n_bulk=0.6)
+# cdft = HardRodsFMT(grid1d, R=0.5, T=0.1, n_bulk=0.6)
 cdft = MLCDFT(grid1d, T=0.1, n_bulk=0.6, w=NNFunction(1, 2, []), f_ex=NNFunction(2, 1, []))
 qp.log.info(f"mu = {cdft.mu}")
-exit()
 
 # Set external potential:
 V0 = 10 * cdft.T
@@ -31,14 +30,14 @@ cdft.finite_difference_test(cdft.random_direction())
 cdft.minimize()
 n = cdft.n
 
-
 # Plot density and potential:
-z1d = get1D(grid1d.z)
-plt.plot(z1d, get1D(cdft.V.data), label="V")
-plt.plot(z1d, get1D(n.data), label="n")
-# plt.plot(z1d, get1D(n.convolve(w0_tilde).data), label="n0")
-# plt.plot(z1d, get1D(n.convolve(w1_tilde).data), label="n1")
-plt.axhline(cdft.n_bulk, color='k', ls='dotted')
-plt.xlabel("z")
-plt.legend()
-plt.show()
+if qp.rc.is_head:
+    z1d = get1D(grid1d.z)
+    plt.plot(z1d, get1D(cdft.V.data), label="V")
+    plt.plot(z1d, get1D(n.data), label="n")
+    # plt.plot(z1d, get1D(n.convolve(w0_tilde).data), label="n0")
+    # plt.plot(z1d, get1D(n.convolve(w1_tilde).data), label="n1")
+    plt.axhline(cdft.n_bulk, color='k', ls='dotted')
+    plt.xlabel("z")
+    plt.legend()
+    plt.show()

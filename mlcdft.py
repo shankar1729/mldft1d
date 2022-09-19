@@ -67,28 +67,33 @@ class MLCDFT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         w_bulk = self.w(torch.tensor(0.))
         n = torch.tensor(n_bulk)
         n.requires_grad = True
-        (self.T * (n * n.log() + self.f_ex(w_bulk * n))).backward()
+        n_bar = w_bulk * n
+        (self.T * (n * n.log() + n_bar @ self.f_ex(n_bar))).backward()
         self.mu = n.grad.item()
 
     def step(self, direction: qp.grid.FieldR, step_size: float) -> None:
         self.logn += step_size * direction
 
     def compute(self, state, energy_only: bool) -> None:  # type: ignore
-        n = self.n
-        V_minus_mu = (-self.mu) + self.V
-        state.energy["Omega0"] = n ^ (self.T * self.logn + V_minus_mu)  # Ideal-gas part
-        # Excess functional:
         w_tilde = self.w(self.grid1d.Gmag)
+        V_minus_mu = (-self.mu) + self.V
+
+        if not energy_only:
+            self.logn.data.requires_grad = True
+            self.logn.data.grad = None
+
+        n = self.n
+        state.energy["Omega0"] = n ^ (self.T * self.logn + V_minus_mu)  # Ideal-gas part
         n_bar = n.convolve(w_tilde)
-        state.energy["Fex"] = self.T * self.f_ex(n_bar).integral()
+        state.energy["Fex"] = self.T * (n_bar ^ self.f_ex(n_bar)).sum()  # Excess part
+
         # Gradient computation:
         if not energy_only:
-            n_grad = self.T * (1. + self.logn) + V_minus_mu
-            n_bar_grad = self.T * self.f_ex.deriv(n_bar)
-            n_grad += n_bar_grad.convolve(w_tilde)
-            state.gradient = qp.grid.FieldR(n_grad.grid, data=n_grad.data * n.data)
+            sum(state.energy.values()).backward()  # derivative -> self.logn.data.grad
+            state.gradient = qp.grid.FieldR(n.grid, data=self.logn.data.grad)
             state.K_gradient = state.gradient
             state.extra = [state.gradient.norm()]
+            self.logn.data.requires_grad = False
 
     def random_direction(self) -> qp.grid.FieldR:
         grid = self.grid1d.grid

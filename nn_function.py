@@ -30,7 +30,10 @@ class NNFunction(torch.nn.Module):
         elif self.n_in == 2:
             # Free energy function mode:
             n0, n1 = x
-            return -0.5 * n0 * torch.log(1. - n1)
+            return torch.stack((
+                -0.5 * torch.log(1. - n1),
+                torch.zeros_like(n0),
+            ))
         else:
             raise NotImplementedError
 
@@ -39,4 +42,4 @@ class NNFunction(torch.nn.Module):
         if isinstance(x, torch.Tensor):
             return self.forward(x)
         else:
-            return qp.grid.FieldR(x.grid, self.forward(x.data))
+            return qp.grid.FieldR(x.grid, data=self.forward(x.data))
