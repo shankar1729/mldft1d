@@ -64,21 +64,27 @@ class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         self.logn += step_size * direction
 
     def compute(self, state, energy_only: bool) -> None:  # type: ignore
+        if not energy_only:
+            self.logn.data.requires_grad = True
+            self.logn.data.grad = None
+
+        # Ideal-gas part:
         n = self.n
         V_minus_mu = (-self.mu) + self.V
-        state.energy["Omega0"] = n ^ (self.T * self.logn + V_minus_mu)  # Ideal-gas part
+        state.energy["Omega0"] = n ^ (self.T * self.logn + V_minus_mu)
+
         # Excess functional:
         n0 = n.convolve(self.w0_tilde)
         n1 = n.convolve(self.w1_tilde)
         state.energy["Fex"] = (-0.5 * self.T) * (n0 ^ (1. - n1).log())
+
         # Gradient computation:
         if not energy_only:
-            n_grad = self.T * (1. + self.logn) + V_minus_mu
-            n_grad += (-0.5 * self.T) * (1. - n1).log().convolve(self.w0_tilde)
-            n_grad += (+0.5 * self.T) * (n0 / (1. - n1)).convolve(self.w1_tilde)
-            state.gradient = qp.grid.FieldR(self.grid1d.grid, data=n_grad.data * n.data)
+            sum(state.energy.values()).backward()  # derivative -> self.logn.data.grad
+            state.gradient = qp.grid.FieldR(n.grid, data=self.logn.data.grad)
             state.K_gradient = state.gradient
             state.extra = [state.gradient.norm()]
+            self.logn.data.requires_grad = False
 
     def random_direction(self) -> qp.grid.FieldR:
         grid = self.grid1d.grid
