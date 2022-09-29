@@ -14,28 +14,28 @@ class NNFunction(torch.nn.Module):
     n_hidden: list[int]  #: Number of neurons in each hidden layer
 
     def __init__(self, n_in: int, n_out: int, n_hidden: list[int]) -> None:
+        super().__init__()
         self.n_in = n_in
         self.n_out = n_out
-        super().__init__()
+        n_nodes = [n_in] + n_hidden + [n_out]
+        self.layers = [
+            torch.nn.Linear(n1, n2) for n1, n2 in zip(n_nodes[:-1], n_nodes[1:])
+        ]
+        self.activation = torch.nn.Softplus()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """EvalDon't reach out to Adelauate NN function."""
-        if self.n_in == 1:
-            # Weight function mode:
-            R = 0.5
-            return torch.stack((
-                2 * (x * R).cos(),
-                (2 * R) * (x * R).sinc()
-            ))
-        elif self.n_in == 2:
-            # Free energy function mode:
-            n0, n1 = x
-            return torch.stack((
-                -0.5 * torch.log(1. - n1),
-                torch.zeros_like(n0),
-            ))
-        else:
-            raise NotImplementedError
+        """Evaluate NN function."""
+        # Prepare inputs:
+        batch_shape = x.shape[1:]
+        if batch_shape:
+            x = x.flatten(1).T  # combine and move batch dimensions to front
+        # Apply fully connected feed-forward neural network:
+        for layer in self.layers:
+            x = self.activation(layer(x))
+        # Restore output dimensions:
+        if batch_shape:
+            x = x.T.unflatten(1, batch_shape)  # restore batch dimensions
+        return x
 
     def __call__(self, x: NNInput) -> NNInput:
         """Evaluate NN function."""

@@ -44,7 +44,7 @@ class MLCDFT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         # Check dimensions:
         assert w.n_in == 1
         assert w.n_out == f_ex.n_in
-        assert f_ex.n_out == 1
+        assert f_ex.n_out == w.n_out
         self.set_n_bulk(n_bulk)
         self.logn = qp.grid.FieldR(
             grid1d.grid, data=torch.full_like(grid1d.z, np.log(self.n_bulk))
@@ -64,7 +64,7 @@ class MLCDFT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         """Update the chemical potential to target given bulk density."""
         self.n_bulk = n_bulk
         # Bulk condition: (d/dn) [f_id(n) + f_ex(w * n)] = mu
-        w_bulk = self.w(torch.tensor(0.))
+        w_bulk = self.w(torch.zeros(1, device=qp.rc.device))
         n = torch.tensor(n_bulk)
         n.requires_grad = True
         n_bar = w_bulk * n
@@ -75,7 +75,7 @@ class MLCDFT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         self.logn += step_size * direction
 
     def compute(self, state, energy_only: bool) -> None:  # type: ignore
-        w_tilde = self.w(self.grid1d.Gmag)
+        w_tilde = self.w(self.grid1d.Gmag[None])
         V_minus_mu = (-self.mu) + self.V
 
         if not energy_only:
@@ -84,7 +84,7 @@ class MLCDFT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
 
         n = self.n
         state.energy["Omega0"] = n ^ (self.T * self.logn + V_minus_mu)  # Ideal-gas part
-        n_bar = n.convolve(w_tilde)
+        n_bar = n[None, ...].convolve(w_tilde)
         state.energy["Fex"] = self.T * (n_bar ^ self.f_ex(n_bar)).sum()  # Excess part
 
         # Gradient computation:
