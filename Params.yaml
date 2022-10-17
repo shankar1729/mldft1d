@@ -1,0 +1,9 @@
+L: 40
+R: 0.5
+T: 0.1
+dz: 0.01
+maximum: 101
+minimum: 1
+n_bulk: 0.6
+step: 1
+vsigma: 0.1
