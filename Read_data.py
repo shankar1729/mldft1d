@@ -11,7 +11,7 @@ n = f['n']
 E = f['E']
 
 plt.plot(z[0], V[0], label="V")
-plt.plot(z[0], n[5], label="n")
+plt.plot(z[0], n[50], label="n")
 plt.axhline(0.6, color='k', ls='dotted')
 plt.xlabel("z")
 plt.legend()
