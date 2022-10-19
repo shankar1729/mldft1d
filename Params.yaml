@@ -1,13 +1,11 @@
 L: 40
+dz: 0.01
 R: 0.5
 T: 0.1
-dz: 0.01
 n_bulk: 0.6
-vsigma: 0.1
-
+Vsigma: 0.1
 lbda:
     min: 1.
     max: 101.
     step: 1.
-
 filename: 'data.hdf5'
