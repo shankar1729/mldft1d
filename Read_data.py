@@ -10,6 +10,7 @@ P_lambda = f['lambda']
 n = f['n']
 E = f['E']
 
+
 print(z.shape)
 print(V.shape)
 print(P_lambda.shape)
