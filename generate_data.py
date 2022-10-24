@@ -1,66 +1,90 @@
 import qimpy as qp
 import numpy as np
-import matplotlib.pyplot as plt
 import torch
 from grid1d import Grid1D, get1D
 from hard_rods_fmt import HardRodsFMT
-from mlcdft import MLCDFT
-from nn_function import NNFunction
+from typing import Optional
 import h5py
+import yaml
+import sys
 
-qp.utils.log_config()  # default set up to log from MPI head alone
-qp.log.info("Using QimPy " + qp.__version__)
-qp.rc.init()
 
-grid1d = Grid1D(L=40., dz=0.01)
-cdft = HardRodsFMT(grid1d, R=0.5, T=0.1, n_bulk=0.6)
-#cdft = MLCDFT(grid1d, T=0.1, n_bulk=0.6, w=NNFunction(1, 2, []), f_ex=NNFunction(2, 2, []))
-qp.log.info(f"mu = {cdft.mu}")
+def run(
+    *,
+    L: float,
+    dz: float,
+    R: float,  #: Radius / half-length `R`
+    T: float,  #: Temperature
+    n_bulk: float,  #: Bulk number density of the fluid
+    Vshape: dict,
+    lbda: dict,  #: min: float, max: float, step: float,
+    filename: str,  #: hdf5 filename, must end with .hdf5
+) -> None:
 
-z1d = get1D(grid1d.z)
-Vsigma = 0.1
-Vshape = qp.grid.FieldR(grid1d.grid, data=(-0.5 * ((grid1d.z - 0.5 * grid1d.L) / Vsigma).square()).exp())
+    grid1d = Grid1D(L=L, dz=dz)
+    cdft = HardRodsFMT(grid1d, R=R, T=T, n_bulk=n_bulk)
+    n0 = cdft.n
 
-n0 = cdft.n
-V0step = 0.5
-V0max = 10.
-results = {}
-for Vsign in (-1, +1):
-    cdft.n = n0
-    for V0mag in np.arange(0., V0max, V0step):
-        V0 = Vsign * V0mag
-        cdft.V = V0 * Vshape
-        E = cdft.minimize()
-        n = cdft.n
-        results[V0] = (n, float(E))
+    qp.log.info(f"mu = {cdft.mu}")
+    V = qp.grid.FieldR(grid1d.grid, data=get_V(grid1d.z, grid1d.L, **Vshape))
 
-P_lambda = np.array(sorted(results.keys()))
-n_f = []
-E = []
-for V0, (n, free_e) in results.items():
-    temp_n = get1D(n.data)
-    n_f.append(temp_n)
-    E.append(free_e)
-n_f = np.array(n_f)
+    lbda_arr = np.arange(lbda["min"], lbda["max"], lbda["step"])
+    E = np.zeros_like(lbda_arr)
+    n = np.zeros((len(E), len(get1D(grid1d.z))))
 
-f = h5py.File("data.hdf5", "w")
+    # Split runs by sign and in increasing order of perturbation strength:
+    abs_index = abs(lbda_arr).argsort()
+    pos_index = [i for i in abs_index if lbda_arr[i] >= 0.0]
+    neg_index = [i for i in abs_index if lbda_arr[i] < 0.0]
+    for cur_index in (neg_index, pos_index):
+        cdft.n = n0
+        for index in cur_index:
+            cdft.V = lbda_arr[index] * V
+            E[index] = float(cdft.minimize())
+            n[index] = get1D(cdft.n.data)
 
-dset = f.create_dataset("z", (1,len(z1d)), dtype = 'f')
-dset[...] = z1d
+    f = h5py.File(filename, "w")
+    f["z"] = get1D(grid1d.z)
+    f["V"] = get1D(V.data)
+    f["lbda"] = lbda_arr
+    f["n"] = n
+    f["E"] = E
+    f.attrs["n_bulk"] = n_bulk
+    f.attrs["T"] = T
+    f.attrs["R"] = R
+    f.close()
 
-V = get1D(Vshape.data)
-dset2 = f.create_dataset("V", (1,len(V)), dtype = 'f')
-dset2[...] = V
 
-dset3 = f.create_dataset("lambda", (1,len(P_lambda)), dtype = 'f')
-dset3[...] = P_lambda
+def get_V(
+    z: torch.Tensor,
+    L: float,
+    *,
+    gauss: Optional[dict] = None,
+    cosine: Optional[dict] = None,
+) -> None:
+    # Make sure exactly one is specified
+    assert len([x for x in (gauss, cosine) if (x is not None)]) == 1
 
-n_shape = n_f.shape
-dset4 = f.create_dataset("n", (n_shape[0],n_shape[1]), dtype = 'f')
-dset4[...] = n_f
-dset4.attrs["n_bulk"] = 0.6 
+    if gauss is not None:
+        return (-0.5 * ((z - 0.5 * L) / gauss["sigma"]).square()).exp()
 
-dset5 = f.create_dataset("E", (1,len(E)), dtype = 'f')
-dset5[...] = E
+    if cosine is not None:
+        pass  # TODO
 
-f.close()
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        print("Usage: python generate_data.py <input.yaml>")
+        exit(1)
+    in_file = sys.argv[1]
+
+    qp.utils.log_config()  # default set up to log from MPI head alone
+    qp.log.info("Using QimPy " + qp.__version__)
+    qp.rc.init()
+
+    with open(in_file) as fp:
+        run(**yaml.load(fp, Loader=yaml.FullLoader))
+
+
+if __name__ == "__main__":
+    main()
