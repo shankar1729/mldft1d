@@ -1,7 +1,9 @@
 import qimpy as qp
 import numpy as np
+import torch
 from grid1d import Grid1D, get1D
 from hard_rods_fmt import HardRodsFMT
+from typing import Optional
 import h5py
 import yaml
 import sys
@@ -14,7 +16,7 @@ def run(
     R: float,  #: Radius / half-length `R`
     T: float,  #: Temperature
     n_bulk: float,  #: Bulk number density of the fluid
-    Vsigma: float,
+    Vshape: dict,
     lbda: dict,  #: min: float, max: float, step: float,
     filename: str,  #: hdf5 filename, must end with .hdf5
 ) -> None:
@@ -24,9 +26,7 @@ def run(
     n0 = cdft.n
 
     qp.log.info(f"mu = {cdft.mu}")
-    Vshape = qp.grid.FieldR(
-        grid1d.grid, data=(-0.5 * ((grid1d.z - 0.5 * grid1d.L) / Vsigma).square()).exp()
-    )
+    V = qp.grid.FieldR(grid1d.grid, data=get_V(grid1d.z, grid1d.L, **Vshape))
 
     lbda_arr = np.arange(lbda["min"], lbda["max"], lbda["step"])
     E = np.zeros_like(lbda_arr)
@@ -39,13 +39,13 @@ def run(
     for cur_index in (neg_index, pos_index):
         cdft.n = n0
         for index in cur_index:
-            cdft.V = lbda_arr[index] * Vshape
+            cdft.V = lbda_arr[index] * V
             E[index] = float(cdft.minimize())
             n[index] = get1D(cdft.n.data)
 
     f = h5py.File(filename, "w")
     f["z"] = get1D(grid1d.z)
-    f["V"] = get1D(Vshape.data)
+    f["V"] = get1D(V.data)
     f["lbda"] = lbda_arr
     f["n"] = n
     f["E"] = E
@@ -53,6 +53,23 @@ def run(
     f.attrs["T"] = T
     f.attrs["R"] = R
     f.close()
+
+
+def get_V(
+    z: torch.Tensor,
+    L: float,
+    *,
+    gauss: Optional[dict] = None,
+    cosine: Optional[dict] = None,
+) -> None:
+    # Make sure exactly one is specified
+    assert len([x for x in (gauss, cosine) if (x is not None)]) == 1
+
+    if gauss is not None:
+        return (-0.5 * ((z - 0.5 * L) / gauss["sigma"]).square()).exp()
+
+    if cosine is not None:
+        pass  # TODO
 
 
 def main() -> None:
