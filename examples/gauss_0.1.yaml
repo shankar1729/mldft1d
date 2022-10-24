@@ -8,4 +8,4 @@ lbda:
     min: 1.
     max: 101.
     step: 5.
-filename: 'data.hdf5'
+filename: 'gauss_0.1.h5'
