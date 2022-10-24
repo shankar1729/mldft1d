@@ -21,6 +21,7 @@ def run(
 
     grid1d = Grid1D(L=L, dz=dz)
     cdft = HardRodsFMT(grid1d, R=R, T=T, n_bulk=n_bulk)
+    n0 = cdft.n
 
     qp.log.info(f"mu = {cdft.mu}")
     Vshape = qp.grid.FieldR(
@@ -28,18 +29,25 @@ def run(
     )
 
     lbda_arr = np.arange(lbda["min"], lbda["max"], lbda["step"])
-    n = []  # dimensions: len(lbda_arr), grid
-    E = []  # dimensions: len(lbda_arr)
-    for lbda_cur in lbda_arr:
-        cdft.V = lbda_cur * Vshape
-        E.append(float(cdft.minimize()))
-        n.append(np.array(get1D(cdft.n.data)))
+    E = np.zeros_like(lbda_arr)
+    n = np.zeros((len(E), len(get1D(grid1d.z))))
+
+    # Split runs by sign and in increasing order of perturbation strength:
+    abs_index = abs(lbda_arr).argsort()
+    pos_index = [i for i in abs_index if lbda_arr[i] >= 0.0]
+    neg_index = [i for i in abs_index if lbda_arr[i] < 0.0]
+    for cur_index in (neg_index, pos_index):
+        cdft.n = n0
+        for index in cur_index:
+            cdft.V = lbda_arr[index] * Vshape
+            E[index] = float(cdft.minimize())
+            n[index] = get1D(cdft.n.data)
 
     f = h5py.File(filename, "w")
     f["z"] = get1D(grid1d.z)
     f["V"] = get1D(Vshape.data)
     f["lbda"] = lbda_arr
-    f["n"] = np.array(n)
+    f["n"] = n
     f["E"] = E
     f.attrs["n_bulk"] = n_bulk
     f.attrs["T"] = T
