@@ -30,8 +30,9 @@ class NNFunction(torch.nn.Module):
         if batch_shape:
             x = x.flatten(1).T  # combine and move batch dimensions to front
         # Apply fully connected feed-forward neural network:
-        for layer in self.layers:
+        for layer in self.layers[:-1]:
             x = self.activation(layer(x))
+        x = self.layers[-1](x)
         # Restore output dimensions:
         if batch_shape:
             x = x.T.unflatten(1, batch_shape)  # restore batch dimensions
