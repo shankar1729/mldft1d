@@ -1,3 +1,4 @@
+import torch
 import qimpy as qp
 import hardrods1d as hr
 import matplotlib.pyplot as plt
@@ -13,11 +14,12 @@ def main():
 
     cdft = hr.mlcdft.Minimizer(
         functional=hr.mlcdft.Functional(
-            T=0.1, w=hr.mlcdft.NNFunction(1, 2, []), f_ex=hr.mlcdft.NNFunction(2, 2, [])
+            T=1.0, w=hr.mlcdft.NNFunction(1, 2, []), f_ex=hr.mlcdft.NNFunction(2, 2, [])
         ),
         grid1d=grid1d,
         n_bulk=0.6,
     )
+    cdft.functional.load_state_dict(torch.load("mlcdft_params.dat"))
     qp.log.info(f"mu = {cdft.mu}")
 
     # Set external potential:
