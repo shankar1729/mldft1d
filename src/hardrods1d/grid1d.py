@@ -18,13 +18,13 @@ class Grid1D:
         The z direction is periodic with length `L` and nominal spacing `dz`.
         """
         self.L = L
-        self.lattice = qp.lattice.Lattice(system="orthorhombic", a=1., b=1., c=L)
+        self.lattice = qp.lattice.Lattice(system="orthorhombic", a=1.0, b=1.0, c=L)
         process_grid = qp.utils.ProcessGrid(qp.rc.comm, "rkb", (1, 1, -1))
         ions = qp.ions.Ions(lattice=self.lattice, process_grid=process_grid)
         symmetries = qp.symmetries.Symmetries(
             lattice=self.lattice,
             ions=ions,
-            axes={'V': np.array((0., 0., 1.))},
+            axes={"V": np.array((0.0, 0.0, 1.0))},
             # z-axis symmetry broken by ext. potential
         )
         Nz = int(np.round(L / dz))  # based on nominal grid spacing
@@ -46,3 +46,8 @@ class Grid1D:
 
 def get1D(x: torch.Tensor) -> np.ndarray:
     return x[0, 0].to(qp.rc.cpu).numpy()
+
+
+def trapz(f: np.ndarray, h: float) -> np.ndarray:
+    """Cumulative trapezoidal integral of a function `f` sampled at spacing `h`."""
+    return np.concatenate(([0.0], np.cumsum(0.5 * (f[:-1] + f[1:])) * h))

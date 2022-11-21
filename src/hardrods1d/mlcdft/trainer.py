@@ -21,7 +21,7 @@ class Trainer(torch.nn.Module):  # type: ignore
     def train_loop(self, optimizer) -> None:
         """Training loop."""
         # TODO: operate on batches of data
-        for data in data_train:
+        for data in self.data_train:
             loss = self(data)
             optimizer.zero_grad()
             loss.backward()

@@ -1,8 +1,6 @@
 import qimpy as qp
-import numpy as np
 import hardrods1d as hr
 import matplotlib.pyplot as plt
-import torch
 
 
 def main():
@@ -10,7 +8,7 @@ def main():
     qp.log.info("Using QimPy " + qp.__version__)
     qp.rc.init()
 
-    grid1d = hr.Grid1D(L=40., dz=0.01)
+    grid1d = hr.Grid1D(L=40.0, dz=0.01)
     # cdft = hr.HardRodsFMT(grid1d, R=0.5, T=0.1, n_bulk=0.6)
 
     cdft = hr.mlcdft.Minimizer(
@@ -42,7 +40,7 @@ def main():
         plt.plot(z1d, hr.get1D(n.data), label="n")
         # plt.plot(z1d, get1D(n.convolve(w0_tilde).data), label="n0")
         # plt.plot(z1d, get1D(n.convolve(w1_tilde).data), label="n1")
-        plt.axhline(cdft.n_bulk, color='k', ls='dotted')
+        plt.axhline(cdft.n_bulk, color="k", ls="dotted")
         plt.xlabel("z")
         plt.legend()
         plt.show()

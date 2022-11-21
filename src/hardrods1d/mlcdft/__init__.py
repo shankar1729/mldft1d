@@ -1,4 +1,4 @@
-__all__ = ["NNFunction", "Functional", "Minimizer", "Data"]
+__all__ = ["NNFunction", "Functional", "Minimizer", "Data", "Trainer"]
 
 from .nn_function import NNFunction
 from .functional import Functional

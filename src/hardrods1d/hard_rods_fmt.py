@@ -42,7 +42,6 @@ class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         self.w0_tilde = 2 * (grid1d.Gmag * R).cos()  # F.T. of w0(x) = delta(R-x)
         self.w1_tilde = (2 * R) * (grid1d.Gmag * R).sinc()  # F.T. of w1(x) = theta(R-x)
 
-
     @property
     def n(self) -> qp.grid.FieldR:
         """Get current density (from self.logn)"""
@@ -76,11 +75,11 @@ class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         # Excess functional:
         n0 = n.convolve(self.w0_tilde)
         n1 = n.convolve(self.w1_tilde)
-        state.energy["Fex"] = (-0.5 * self.T) * (n0 ^ (1. - n1).log())
+        state.energy["Fex"] = (-0.5 * self.T) * (n0 ^ (1.0 - n1).log())
 
         # Gradient computation:
         if not energy_only:
-            sum(state.energy.values()).backward()  # derivative -> self.logn.data.grad
+            state.energy.sum_tensor().backward()  # derivative -> self.logn.data.grad
             state.gradient = qp.grid.FieldR(n.grid, data=self.logn.data.grad)
             state.K_gradient = state.gradient
             state.extra = [state.gradient.norm()]

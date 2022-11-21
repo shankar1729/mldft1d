@@ -60,7 +60,7 @@ def get_V(
     *,
     gauss: Optional[dict] = None,
     cosine: Optional[dict] = None,
-) -> None:
+) -> torch.Tensor:
     # Make sure exactly one is specified
     assert len([x for x in (gauss, cosine) if (x is not None)]) == 1
 
@@ -68,7 +68,9 @@ def get_V(
         return (-0.5 * ((z - 0.5 * L) / gauss["sigma"]).square()).exp()
 
     if cosine is not None:
-        pass  # TODO
+        return ((2 * np.pi / L) * z).cos()
+
+    return z  # Should never be encountered
 
 
 def main() -> None:

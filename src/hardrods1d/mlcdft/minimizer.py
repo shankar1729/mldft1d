@@ -15,7 +15,9 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
     mu: float  #: Bulk chemical potential
     T: float  #: Temperature
 
-    def __init__(self, *, functional: Functional, grid1d: Grid1D, n_bulk: float) -> None:
+    def __init__(
+        self, *, functional: Functional, grid1d: Grid1D, n_bulk: float
+    ) -> None:
         super().__init__(
             comm=qp.rc.comm,
             checkpoint_in=qp.utils.CpPath(),
@@ -58,7 +60,7 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
 
         # Gradient computation:
         if not energy_only:
-            sum(state.energy.values()).backward()  # derivative -> self.logn.data.grad
+            state.energy.sum_tensor().backward()  # derivative -> self.logn.data.grad
             state.gradient = qp.grid.FieldR(n.grid, data=self.logn.data.grad)
             state.K_gradient = state.gradient
             state.extra = [state.gradient.norm()]

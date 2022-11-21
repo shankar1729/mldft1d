@@ -1,4 +1,5 @@
 import h5py
+import hardrods1d as hr
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -44,7 +45,7 @@ def plot_data(data_file: str) -> None:
     dz = z[1] - z[0]
     integrand = (n @ V) * dz
     dlbda = lbda[1] - lbda[0]
-    E_TI = trapz(integrand, dlbda)
+    E_TI = hr.trapz(integrand, dlbda)
     E_TI -= np.interp(0.0, lbda, E_TI)  # difference from bulk
     plt.plot(lbda, E_TI, "r+", label="TI")
     plt.axhline(0, color="k", lw=1, ls="dotted")
@@ -55,11 +56,6 @@ def plot_data(data_file: str) -> None:
     plt.ylabel(r"Free energy change, $\Delta\Phi$")
 
     plt.show()
-
-
-def trapz(f: np.ndarray, h: float) -> np.ndarray:
-    """Cumulative trapezoidal integral of a function sampled at spacing `h`."""
-    return np.concatenate(([0.0], np.cumsum(0.5 * (f[:-1] + f[1:])) * h))
 
 
 def main() -> None:
