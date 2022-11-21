@@ -18,7 +18,10 @@ class NNFunction(torch.nn.Module):
         self.n_out = n_out
         n_nodes = [n_in] + n_hidden + [n_out]
         self.layers = torch.nn.ModuleList(
-            [torch.nn.Linear(n1, n2) for n1, n2 in zip(n_nodes[:-1], n_nodes[1:])]
+            [
+                torch.nn.Linear(n1, n2, device=qp.rc.device)
+                for n1, n2 in zip(n_nodes[:-1], n_nodes[1:])
+            ]
         )
         self.activation = torch.nn.Softplus()
 

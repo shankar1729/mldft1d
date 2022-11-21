@@ -20,13 +20,16 @@ def main():
         cdft = hr.mlcdft.Minimizer(
             functional=hr.mlcdft.Functional(
                 T=1.0,
-                w=hr.mlcdft.NNFunction(1, 2, [30, 30]),
-                f_ex=hr.mlcdft.NNFunction(2, 2, [30, 30]),
+                w=hr.mlcdft.NNFunction(1, 2, [30, 30, 30]),
+                f_ex=hr.mlcdft.NNFunction(2, 2, [30, 30, 30]),
             ),
             grid1d=grid1d,
             n_bulk=0.6,
         )
-        cdft.functional.load_state_dict(torch.load("mlcdft_params.dat"))
+        cdft.functional.load_state_dict(
+            torch.load("mlcdft_params.dat", map_location=qp.rc.device)
+        )
+
     qp.log.info(f"mu = {cdft.mu}")
 
     # Set external potential:

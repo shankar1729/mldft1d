@@ -70,8 +70,6 @@ class Trainer(torch.nn.Module):  # type: ignore
         )[0]
 
         # Compute loss from error in V:
-        data.n.data.requires_grad = False
-        data.n.data.grad = None
         return Verr.square().sum()
 
     def train_loop(self, optimizer) -> None:
@@ -117,21 +115,23 @@ def main() -> None:
     # Initialize functional:
     functional = hr.mlcdft.Functional(
         T=1.0,
-        w=hr.mlcdft.NNFunction(1, 2, [30, 30]),
-        f_ex=hr.mlcdft.NNFunction(2, 2, [30, 30]),
+        w=hr.mlcdft.NNFunction(1, 2, [30, 30, 30]),
+        f_ex=hr.mlcdft.NNFunction(2, 2, [30, 30, 30]),
     )
     params_filename = "mlcdft_params.dat"
     if os.path.isfile(params_filename):
-        functional.load_state_dict(torch.load(params_filename))
+        functional.load_state_dict(
+            torch.load(params_filename, map_location=qp.rc.device)
+        )
 
     # Initialize trainer:
     filenames = sys.argv[1:]
     assert len(filenames)
     torch.random.manual_seed(0)
-    trainer = Trainer(functional, filenames, batch_size=7)
-    optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=1e-4)
+    trainer = Trainer(functional, filenames, batch_size=8)
+    optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=3e-6)
 
-    epochs = 10
+    epochs = 100
     for t in range(epochs):
         qp.log.info(f"\n------------- Epoch {t + 1} -------------")
         trainer.train_loop(optimizer)
