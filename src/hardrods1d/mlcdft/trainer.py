@@ -67,12 +67,14 @@ class Trainer(torch.nn.Module):  # type: ignore
     def train_loop(self, optimizer) -> None:
         """Training loop."""
         # TODO: operate on batches of data
+        loss_total = 0.0
+        optimizer.zero_grad()
         for data in self.data_train:
             loss = self(data)
-            qp.log.info(f"Loss: {loss.item():>7f}")
-            optimizer.zero_grad()
             loss.backward()
-            optimizer.step()
+            loss_total += loss.item()
+        optimizer.step()
+        qp.log.info(f"Loss: {loss_total:>7f}")
 
     def test_loop(self) -> None:
         """Test loop."""
