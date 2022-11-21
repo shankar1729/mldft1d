@@ -1,10 +1,13 @@
+import sys
+import torch
 import qimpy as qp
+import numpy as np
+import hardrods1d as hr
 from h5py import File
-from ..grid1d import Grid1D
 
 
 class Data:
-    grid1d: Grid1D
+    grid1d: hr.Grid1D
     V: torch.Tensor
     n: torch.Tensor
     E: torch.Tensor
@@ -17,7 +20,7 @@ class Data:
         f = File(filename, "r")
         z = torch.tensor(f["z"], device=qp.rc.device)
         self.V = torch.tensor(f["V"], device=qp.rc.device)
-        self.n = torch.tensor(f["n"], device=qp.rc.device)
+        self.n = torch.tensor(np.array(f["n"]), device=qp.rc.device)
         self.E = torch.tensor(f["E"], device=qp.rc.device)
         self.n_bulk = float(f.attrs["n_bulk"])
         self.T = float(f.attrs["T"])
@@ -26,5 +29,22 @@ class Data:
         # Create grid:
         dz = (z[1] - z[0]).item()
         L = (z[-1] - z[0]).item() + dz
-        self.grid1d = Grid1D(L=L, dz=dz)
-        assert len(z) == len(self.grid1d.z)
+        self.grid1d = hr.Grid1D(L=L, dz=dz)
+        assert len(z) == self.grid1d.z.shape[2]
+
+    def __repr__(self) -> str:
+        return (
+            "hardrods1d.mlcdft.Data("
+            f"T={self.T}, R={self.R}, n_bulk={self.n_bulk}, L={self.grid1d.L},"
+            f"n_perturbations={len(self.n)}"
+            ")"
+        )
+
+
+def main() -> None:
+    for filename in sys.argv[1:]:
+        print(Data(filename))
+
+
+if __name__ == "__main__":
+    main()

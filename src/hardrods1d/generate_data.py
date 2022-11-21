@@ -1,8 +1,7 @@
 import qimpy as qp
 import numpy as np
+import hardrods1d as hr
 import torch
-from grid1d import Grid1D, get1D
-from hard_rods_fmt import HardRodsFMT
 from typing import Optional
 import h5py
 import yaml
@@ -21,8 +20,8 @@ def run(
     filename: str,  #: hdf5 filename, must end with .hdf5
 ) -> None:
 
-    grid1d = Grid1D(L=L, dz=dz)
-    cdft = HardRodsFMT(grid1d, R=R, T=T, n_bulk=n_bulk)
+    grid1d = hr.Grid1D(L=L, dz=dz)
+    cdft = hr.HardRodsFMT(grid1d, R=R, T=T, n_bulk=n_bulk)
     n0 = cdft.n
 
     qp.log.info(f"mu = {cdft.mu}")
@@ -30,7 +29,7 @@ def run(
 
     lbda_arr = np.arange(lbda["min"], lbda["max"], lbda["step"])
     E = np.zeros_like(lbda_arr)
-    n = np.zeros((len(E), len(get1D(grid1d.z))))
+    n = np.zeros((len(E), len(hr.get1D(grid1d.z))))
 
     # Split runs by sign and in increasing order of perturbation strength:
     abs_index = abs(lbda_arr).argsort()
@@ -41,11 +40,11 @@ def run(
         for index in cur_index:
             cdft.V = lbda_arr[index] * V
             E[index] = float(cdft.minimize())
-            n[index] = get1D(cdft.n.data)
+            n[index] = hr.get1D(cdft.n.data)
 
     f = h5py.File(filename, "w")
-    f["z"] = get1D(grid1d.z)
-    f["V"] = get1D(V.data)
+    f["z"] = hr.get1D(grid1d.z)
+    f["V"] = hr.get1D(V.data)
     f["lbda"] = lbda_arr
     f["n"] = n
     f["E"] = E
