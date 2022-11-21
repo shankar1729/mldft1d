@@ -9,23 +9,24 @@ from typing import Sequence
 
 class Trainer(torch.nn.Module):  # type: ignore
 
+    functional: hr.mlcdft.Functional
     data_train: Sequence[hr.mlcdft.Data]  #: Training data
     data_test: Sequence[hr.mlcdft.Data]  #: Testing data
     batch_sizes: Sequence[int]  #: Number of points in each batch during optimization
-    functional: hr.mlcdft.Functional
 
     def __init__(
         self,
+        functional: hr.mlcdft.Functional,
         filenames: Sequence[str],
         train_fraction: float = 0.8,
         batch_size: int = 10,
-        initial_params_filename: str = "",
     ) -> None:
         super().__init__()
+        self.functional = functional
 
         # Load and check data consistency:
         data = [hr.mlcdft.Data(filename) for filename in filenames]
-        T = data[0].T
+        T = functional.T
         R = data[0].R
         for data_i in data:
             assert T == data_i.T
@@ -54,13 +55,6 @@ class Trainer(torch.nn.Module):  # type: ignore
         qp.log.info("\nTest set:")
         for data_i in self.data_test:
             qp.log.info(f"  {data_i}")
-
-        # Initialize functional:
-        self.functional = hr.mlcdft.Functional(
-            T=T, w=hr.mlcdft.NNFunction(1, 2, []), f_ex=hr.mlcdft.NNFunction(2, 2, [])
-        )
-        if initial_params_filename and os.path.isfile(initial_params_filename):
-            self.functional.load_state_dict(torch.load(initial_params_filename))
 
     def forward(self, data: hr.mlcdft.Data) -> torch.Tensor:
         """Compute loss function for one complete perturbation data-set"""
@@ -119,12 +113,23 @@ def main() -> None:
     qp.rc.init()
 
     # TODO: get all parameters from YAML input
+
+    # Initialize functional:
+    functional = hr.mlcdft.Functional(
+        T=1.0,
+        w=hr.mlcdft.NNFunction(1, 2, [30, 30]),
+        f_ex=hr.mlcdft.NNFunction(2, 2, [30, 30]),
+    )
+    params_filename = "mlcdft_params.dat"
+    if os.path.isfile(params_filename):
+        functional.load_state_dict(torch.load(params_filename))
+
+    # Initialize trainer:
     filenames = sys.argv[1:]
     assert len(filenames)
-    params_filename = "mlcdft_params.dat"
     torch.random.manual_seed(0)
-    trainer = Trainer(filenames, batch_size=7, initial_params_filename=params_filename)
-    optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=1e-5)
+    trainer = Trainer(functional, filenames, batch_size=7)
+    optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=1e-4)
 
     epochs = 10
     for t in range(epochs):

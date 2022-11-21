@@ -10,27 +10,34 @@ def main():
     qp.rc.init()
 
     grid1d = hr.Grid1D(L=40.0, dz=0.01)
-    # cdft = hr.HardRodsFMT(grid1d, R=0.5, T=0.1, n_bulk=0.6)
+    use_exact_cdft = False
 
-    cdft = hr.mlcdft.Minimizer(
-        functional=hr.mlcdft.Functional(
-            T=1.0, w=hr.mlcdft.NNFunction(1, 2, []), f_ex=hr.mlcdft.NNFunction(2, 2, [])
-        ),
-        grid1d=grid1d,
-        n_bulk=0.6,
-    )
-    cdft.functional.load_state_dict(torch.load("mlcdft_params.dat"))
+    if use_exact_cdft:
+        # Use exact functional:
+        cdft = hr.HardRodsFMT(grid1d, R=0.5, T=1.0, n_bulk=0.6)
+    else:
+        # Use MLCDFT approximation:
+        cdft = hr.mlcdft.Minimizer(
+            functional=hr.mlcdft.Functional(
+                T=1.0,
+                w=hr.mlcdft.NNFunction(1, 2, [30, 30]),
+                f_ex=hr.mlcdft.NNFunction(2, 2, [30, 30]),
+            ),
+            grid1d=grid1d,
+            n_bulk=0.6,
+        )
+        cdft.functional.load_state_dict(torch.load("mlcdft_params.dat"))
     qp.log.info(f"mu = {cdft.mu}")
 
     # Set external potential:
-    V0 = 10 * cdft.T
+    V0 = 2 * cdft.T
     Vsigma = 0.1
     cdft.V.data = (0.5 * V0) * (
         (0.4 * grid1d.L - (grid1d.z - 0.5 * grid1d.L).abs()) / Vsigma
     ).erfc()
 
     # Finite difference test
-    cdft.finite_difference_test(cdft.random_direction())
+    # cdft.finite_difference_test(cdft.random_direction())
 
     cdft.minimize()
     n = cdft.n
