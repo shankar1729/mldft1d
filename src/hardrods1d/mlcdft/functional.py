@@ -28,12 +28,15 @@ class Functional(torch.nn.Module):  # type: ignore
         assert f_ex.n_out == w.n_out
 
     def get_energy(self, n: qp.grid.FieldR, V_minus_mu: qp.grid.FieldR) -> qp.Energy:
-        w_tilde = self.w(Functional.Gmag(n.grid)[None])
+        Gmag = Functional.Gmag(n.grid)[None]
+        for i_batch_dim in range(len(n.data.shape) - 3):
+            Gmag = Gmag[None]
+        w_tilde = self.w(Gmag)
         n_bar = n[None, ...].convolve(w_tilde)
 
         energy = qp.Energy()
         energy["Omega0"] = n ^ (self.T * n.log() + V_minus_mu)  # Ideal-gas part
-        energy["Fex"] = self.T * (n_bar ^ self.f_ex(n_bar)).sum()  # Excess part
+        energy["Fex"] = self.T * (n_bar ^ self.f_ex(n_bar)).sum(dim=0)  # Excess part
         return energy
 
     def get_mu(self, n_bulk: float) -> float:

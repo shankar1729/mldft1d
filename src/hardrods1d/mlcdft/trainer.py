@@ -46,20 +46,33 @@ class Trainer(torch.nn.Module):  # type: ignore
     def forward(self, data: hr.mlcdft.Data) -> torch.Tensor:
         """Compute loss function for one complete perturbation data-set"""
         # Set mu
-        # Compute V for every data.n
-        # Return ||V - data.V|| as loss
+        mu = self.functional.get_mu(data.n_bulk)
+
+        # Compute energy and gradient:
+        data.n.data.requires_grad = True
+        data.n.data.grad = None
+        E = self.functional.get_energy(data.n, data.V - mu)
+        # E.sum_tensor().sum().backward(retain_graph=True)
+        Verr = torch.autograd.grad(
+            E.sum_tensor().sum(), data.n.data, create_graph=True
+        )[0]
+
+        # Gradient = error in potential:
+        # Verr = data.n.data.grad
+        # print(Verr)
+        data.n.data.requires_grad = False
+        data.n.data.grad = None
+        return Verr.square().sum()  # loss function
 
     def train_loop(self, optimizer) -> None:
         """Training loop."""
         # TODO: operate on batches of data
         for data in self.data_train:
             loss = self(data)
+            qp.log.info(f"Loss: {loss.item():>7f}")
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
-        # loss, current = loss.item(), batch * len(X)
-        # print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
 
     def test_loop(self) -> None:
         """Test loop."""
@@ -74,12 +87,7 @@ def main() -> None:
     filenames = sys.argv[1:]
     assert len(filenames)
     trainer = Trainer(filenames)
-
-    for name, param in trainer.functional.named_parameters():
-        print(f"Layer: {name} | Size: {param.size()} | Values : {param[:2]} \n")
-
-    exit()
-    optimizer = torch.optim.SGD(trainer.functional.w.parameters(), lr=0.1)
+    optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=1e-5)
 
     epochs = 10
     for t in range(epochs):
