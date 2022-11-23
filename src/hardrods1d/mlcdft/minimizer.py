@@ -31,7 +31,7 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
         self.functional = functional
         self.grid1d = grid1d
         self.n_bulk = n_bulk
-        self.mu = functional.get_mu(n_bulk)
+        self.mu = functional.get_mu(n_bulk).item()
         self.T = functional.T
         self.logn = qp.grid.FieldR(
             grid1d.grid, data=torch.full_like(grid1d.z, np.log(self.n_bulk))

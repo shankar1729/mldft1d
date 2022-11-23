@@ -59,12 +59,13 @@ class Trainer(torch.nn.Module):  # type: ignore
     def forward(self, data: hr.mlcdft.Data) -> torch.Tensor:
         """Compute loss function for one complete perturbation data-set"""
         # Set mu
-        mu = self.functional.get_mu(data.n_bulk)
+        mu = self.functional.get_mu(data.n_bulk, create_graph=True)
+        V_minus_mu = qp.grid.FieldR(data.V.grid, data=(data.V.data - mu))
 
         # Compute energy and gradient (= error in V):
         data.n.data.requires_grad = True
         data.n.data.grad = None
-        E = self.functional.get_energy(data.n, data.V - mu)
+        E = self.functional.get_energy(data.n, V_minus_mu)
         Verr = torch.autograd.grad(
             E.sum_tensor().sum(), data.n.data, create_graph=True
         )[0]
@@ -109,14 +110,15 @@ def main() -> None:
     qp.utils.log_config()  # default set up to log from MPI head alone
     qp.log.info("Using QimPy " + qp.__version__)
     qp.rc.init()
+    torch.random.manual_seed(0)
 
     # TODO: get all parameters from YAML input
 
     # Initialize functional:
     functional = hr.mlcdft.Functional(
         T=1.0,
-        w=hr.mlcdft.NNFunction(1, 2, [30, 30, 30]),
-        f_ex=hr.mlcdft.NNFunction(2, 2, [30, 30, 30]),
+        w=hr.mlcdft.NNFunction(1, 2, [10, 10]),
+        f_ex=hr.mlcdft.NNFunction(2, 2, [10, 10]),
     )
     params_filename = "mlcdft_params.dat"
     if os.path.isfile(params_filename):
@@ -127,11 +129,10 @@ def main() -> None:
     # Initialize trainer:
     filenames = sys.argv[1:]
     assert len(filenames)
-    torch.random.manual_seed(0)
-    trainer = Trainer(functional, filenames, batch_size=8)
-    optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=3e-6)
+    trainer = Trainer(functional, filenames, batch_size=4)
+    optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=1e-5)
 
-    epochs = 100
+    epochs = 1000
     for t in range(epochs):
         qp.log.info(f"\n------------- Epoch {t + 1} -------------")
         trainer.train_loop(optimizer)

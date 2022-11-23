@@ -20,8 +20,8 @@ def main():
         cdft = hr.mlcdft.Minimizer(
             functional=hr.mlcdft.Functional(
                 T=1.0,
-                w=hr.mlcdft.NNFunction(1, 2, [30, 30, 30]),
-                f_ex=hr.mlcdft.NNFunction(2, 2, [30, 30, 30]),
+                w=hr.mlcdft.NNFunction(1, 2, [10, 10]),
+                f_ex=hr.mlcdft.NNFunction(2, 2, [10, 10]),
             ),
             grid1d=grid1d,
             n_bulk=0.6,
