@@ -17,18 +17,15 @@ def main():
         cdft = hr.HardRodsFMT(grid1d, R=0.5, T=1.0, n_bulk=0.6)
     else:
         # Use MLCDFT approximation:
-        cdft = hr.mlcdft.Minimizer(
-            functional=hr.mlcdft.Functional(
-                T=1.0,
-                w=hr.mlcdft.NNFunction(1, 2, [10, 10]),
-                f_ex=hr.mlcdft.NNFunction(2, 2, [10, 10]),
-            ),
-            grid1d=grid1d,
-            n_bulk=0.6,
+        functional = hr.mlcdft.Functional(
+            T=1.0,
+            w=hr.mlcdft.NNFunction(1, 2, [10, 10]),
+            f_ex=hr.mlcdft.NNFunction(2, 2, [10, 10]),
         )
-        cdft.functional.load_state_dict(
+        functional.load_state_dict(
             torch.load("mlcdft_params.dat", map_location=qp.rc.device)
         )
+        cdft = hr.mlcdft.Minimizer(functional=functional, grid1d=grid1d, n_bulk=0.6)
 
     qp.log.info(f"mu = {cdft.mu}")
 
