@@ -80,29 +80,34 @@ class Trainer(torch.nn.Module):  # type: ignore
 
         # Step optimizer once per batch:
         loop_loss_total = 0.0
+        loop_n_perturbations = 0
         for i_batch, data_batch in enumerate(data_batches):
             # Collect total loss and gradient over batch
             loss_total = 0.0
+            n_perturbations = 0
             optimizer.zero_grad()
             for data in data_batch:
                 loss = self(data)
                 loss.backward()
                 loss_total += loss.item()
+                n_perturbations += data.n_perturbations
             optimizer.step()
             loop_loss_total += loss_total
+            loop_n_perturbations += n_perturbations
 
             # Report mean loss in batch:
-            loss_mean = loss_total / len(data_batch)
+            loss_mean = loss_total / n_perturbations
             qp.log.info(f"  Batch: {i_batch}  Mean loss: {loss_mean:>7f}")
 
         # Report mean loss in loop:
-        loop_loss_mean = loop_loss_total / len(self.data_train)
+        loop_loss_mean = loop_loss_total / loop_n_perturbations
         qp.log.info(f"  Train Mean loss: {loop_loss_mean:>7f}")
 
     def test_loop(self) -> None:
         """Test loop."""
-        losses = np.array([self(data).item() for data in self.data_test])
-        loss_mean = losses.mean()
+        loss_total = sum(self(data).item() for data in self.data_test)
+        n_perturbations = sum(data.n_perturbations for data in self.data_test)
+        loss_mean = loss_total / n_perturbations
         qp.log.info(f"  Test Mean loss: {loss_mean:>7f}")
 
 
@@ -129,12 +134,12 @@ def main() -> None:
     # Initialize trainer:
     filenames = sys.argv[1:]
     assert len(filenames)
-    trainer = Trainer(functional, filenames, batch_size=4)
+    trainer = Trainer(functional, filenames, batch_size=10)
     optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=1e-5)
 
-    epochs = 1000
+    epochs = 100
     for t in range(epochs):
-        qp.log.info(f"\n------------- Epoch {t + 1} -------------")
+        qp.log.info(f"\n--------- Epoch {t + 1} (t = {qp.rc.clock():.1f}s) ---------")
         trainer.train_loop(optimizer)
         trainer.test_loop()
     qp.log.info("Done!")
