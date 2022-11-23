@@ -14,7 +14,7 @@ def main():
     T = 1.0
 
     # Create external potential:
-    V0 = 2 * T
+    V0 = 3 * T
     Vsigma = 0.1
     V = qp.grid.FieldR(
         grid1d.grid,
@@ -42,17 +42,19 @@ def main():
     for cdft in cdfts.values():
         cdft.V = V
         cdft.finite_difference_test(cdft.random_direction())
-        cdft.minimize()
+        cdft.E = cdft.minimize()
 
     # Plot density and potential:
     if qp.rc.is_head:
         z1d = hr.get1D(grid1d.z)
-        plt.plot(z1d, hr.get1D(V.data), label="V")
+        plt.plot(z1d, hr.get1D(V.data) / V0, label=f"$V/V_0$ (with $V_0 = {V0}$)")
         for cdft_name, cdft in cdfts.items():
-            qp.log.info(f"mu ({cdft_name}) = {cdft.mu}")
-            plt.plot(z1d, hr.get1D(cdft.n.data), label=f"n ({cdft_name})")
+            DeltaE = float(cdft.E) - cdft.mu * n_bulk * grid1d.L
+            qp.log.info(f"{cdft_name:>7s}:  mu: {cdft.mu:>7f} DeltaE: {DeltaE:>9f}")
+            plt.plot(z1d, hr.get1D(cdft.n.data), label=f"$n$ ({cdft_name})")
         plt.axhline(n_bulk, color="k", ls="dotted")
         plt.xlabel("z")
+        plt.ylim(0, None)
         plt.legend()
         plt.show()
 

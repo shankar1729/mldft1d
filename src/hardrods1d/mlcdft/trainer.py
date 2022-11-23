@@ -60,8 +60,8 @@ class Trainer(torch.nn.Module):  # type: ignore
         # Compute loss from error in V:
         return Verr.square().sum()
 
-    def train_loop(self, optimizer) -> None:
-        """Training loop."""
+    def train_loop(self, optimizer) -> float:
+        """Run training loop and return mean loss (over epoch)."""
         loss_total = 0.0
         n_perturbations = 0
         for data in self.data_train:
@@ -72,23 +72,13 @@ class Trainer(torch.nn.Module):  # type: ignore
             optimizer.step()
             loss_total += loss.item()
             n_perturbations += data.n_perturbations
+        return loss_total / n_perturbations
 
-            # Report mean loss in batch:
-            loss_mean_cur = loss.item() / data.n_perturbations
-            L, dz, n_bulk = data.grid1d.L, data.grid1d.dz, data.n_bulk
-            batch_name = f"{L=:.2f},{dz=:.3f},{n_bulk=:.3f}"
-            qp.log.info(f"  Batch {batch_name:>15s}:  Mean loss: {loss_mean_cur:>7f}")
-
-        # Report mean loss in loop:
-        loss_mean = loss_total / n_perturbations
-        qp.log.info(f"  Train Mean loss: {loss_mean:>7f}")
-
-    def test_loop(self) -> None:
-        """Test loop."""
+    def test_loop(self) -> float:
+        """Run test loop and return mean loss."""
         loss_total = sum(self(data).item() for data in self.data_test)
         n_perturbations = sum(data.n_perturbations for data in self.data_test)
-        loss_mean = loss_total / n_perturbations
-        qp.log.info(f"  Test Mean loss: {loss_mean:>7f}")
+        return loss_total / n_perturbations
 
 
 def main() -> None:
@@ -115,13 +105,18 @@ def main() -> None:
     filenames = sys.argv[1:]
     assert len(filenames)
     trainer = Trainer(functional, filenames)
-    optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=1e-5)
+    optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=1e-1)
 
-    epochs = 100
+    # Train:
+    epochs = 300
+    qp.log.info(f"\nTraining for {epochs} epochs")
     for t in range(epochs):
-        qp.log.info(f"\n--------- Epoch {t + 1} (t = {qp.rc.clock():.1f}s) ---------")
-        trainer.train_loop(optimizer)
-        trainer.test_loop()
+        loss_train = trainer.train_loop(optimizer)
+        loss_test = trainer.test_loop()
+        qp.log.info(
+            f"Epoch: {t + 1:3d}  TrainLoss: {loss_train:>7f}"
+            f"  TestLoss: {loss_test:>7f}  t[s]: {qp.rc.clock():.1f}"
+        )
     qp.log.info("Done!")
     torch.save(trainer.functional.state_dict(), params_filename)
 
