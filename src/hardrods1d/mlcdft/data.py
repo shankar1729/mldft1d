@@ -1,5 +1,6 @@
 import sys
 import torch
+import functools
 import qimpy as qp
 import numpy as np
 import hardrods1d as hr
@@ -32,7 +33,7 @@ class Data:
         # Create grid:
         dz = (z[1] - z[0]).item()
         L = (z[-1] - z[0]).item() + dz
-        self.grid1d = hr.Grid1D(L=L, dz=dz)
+        self.grid1d = get_grid1d(L, dz)
         assert len(z) == self.grid1d.z.shape[2]
 
         # Create fieldR's for n and V:
@@ -51,6 +52,13 @@ class Data:
 def main() -> None:
     for filename in sys.argv[1:]:
         print(Data(filename))
+
+
+@functools.lru_cache()
+def get_grid1d(L: float, dz: float) -> hr.Grid1D:
+    """Get/make a 1D grid of length `L` and spacing `dz` (cached by L, dz)."""
+    qp.log.info(f"\n----- Making 1D grid for {L = } and {dz = } -----")
+    return hr.Grid1D(L=L, dz=dz)
 
 
 if __name__ == "__main__":
