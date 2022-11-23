@@ -46,6 +46,7 @@ def main():
 
     # Plot density and potential:
     if qp.rc.is_head:
+        plt.figure(1, figsize=(10, 6))
         z1d = hr.get1D(grid1d.z)
         plt.plot(z1d, hr.get1D(V.data) / V0, label=f"$V/V_0$ (with $V_0 = {V0}$)")
         for cdft_name, cdft in cdfts.items():
@@ -56,6 +57,7 @@ def main():
         plt.xlabel("z")
         plt.ylim(0, None)
         plt.legend()
+        plt.savefig("test.pdf", bbox_inches="tight")
         plt.show()
 
 
