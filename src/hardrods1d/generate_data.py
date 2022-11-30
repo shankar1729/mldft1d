@@ -3,7 +3,6 @@ import numpy as np
 import hardrods1d as hr
 import torch
 import h5py
-import yaml
 import sys
 from typing import Dict, Any
 
@@ -62,7 +61,7 @@ def get_V_gauss(z: torch.Tensor, L: float, *, sigma: float) -> torch.Tensor:
     return (-0.5 * ((z - 0.5 * L) / sigma).square()).exp()
 
 
-def get_V_cosine(z: torch.Tensor, L: float, *, n: int) -> torch.Tensor:
+def get_V_cosine(z: torch.Tensor, L: float, *, n: int = 1) -> torch.Tensor:
     return ((2 * n * np.pi / L) * z).cos()
 
 
@@ -79,8 +78,8 @@ def main() -> None:
     qp.log.info("Using QimPy " + qp.__version__)
     qp.rc.init()
 
-    with open(in_file) as fp:
-        run(**yaml.load(fp, Loader=yaml.FullLoader))
+    input_dict = qp.utils.dict.key_cleanup(qp.utils.yaml.load(in_file))
+    run(**input_dict)
 
 
 if __name__ == "__main__":

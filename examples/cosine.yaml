@@ -1,16 +1,15 @@
-L: 20
+L: ${L}
 dz: 0.01
 R: 0.5
 T: 0.1
 n_bulk: 0.6
 
 Vshape:
-  shape: gauss
-  sigma: 0.1
+  shape: cosine
 
 lbda:
   min: -1.
   max: +1.
   step: 0.05
 
-filename: gauss_0.1.h5
+filename: cosine_${L}.h5
