@@ -5,6 +5,7 @@ import torch
 import h5py
 import yaml
 import sys
+from typing import Dict, Any
 
 
 def run(
@@ -14,7 +15,7 @@ def run(
     R: float,  #: Radius / half-length `R`
     T: float,  #: Temperature
     n_bulk: float,  #: Bulk number density of the fluid
-    Vshape: dict,
+    Vshape: dict,  #: Potential shape and parameters
     lbda: dict,  #: min: float, max: float, step: float,
     filename: str,  #: hdf5 filename, must end with .hdf5
 ) -> None:
@@ -53,24 +54,19 @@ def run(
     f.close()
 
 
-def get_V(
-    z: torch.Tensor,
-    L: float,
-    *,
-    params: dict,
-    shape: str = "gauss",  # gauss perturbation by default
-) -> torch.Tensor:
+def get_V(z: torch.Tensor, L: float, *, shape: str, **kwargs) -> torch.Tensor:
+    return get_V_map[shape](z, L, **kwargs)  # type: ignore
 
-    if shape == "gauss":
-        assert "sigma" in params.keys()
-        return (-0.5 * ((z - 0.5 * L) / params["sigma"]).square()).exp()
 
-    if shape == "cosine":
-        assert params is not None
-        assert "n" in params.keys()  # periodicity
-        return ((2 * params["n"] * np.pi / L) * z).cos()
+def get_V_gauss(z: torch.Tensor, L: float, *, sigma: float) -> torch.Tensor:
+    return (-0.5 * ((z - 0.5 * L) / sigma).square()).exp()
 
-    return z  # Should never be encountered
+
+def get_V_cosine(z: torch.Tensor, L: float, *, n: int) -> torch.Tensor:
+    return ((2 * n * np.pi / L) * z).cos()
+
+
+get_V_map: Dict[str, Any] = {"gauss": get_V_gauss, "cosine": get_V_cosine}
 
 
 def main() -> None:
