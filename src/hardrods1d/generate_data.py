@@ -58,17 +58,22 @@ def get_V(
     z: torch.Tensor,
     L: float,
     *,
-    gauss: Optional[dict] = None,
-    cosine: Optional[dict] = None,
+    #gauss: Optional[dict] = None,
+    #cosine: Optional[dict] = None,
+    shape: str = 'gauss', # gauss perturbation by default
+    params: Optional[dict] = None
 ) -> torch.Tensor:
-    # Make sure exactly one is specified
-    assert len([x for x in (gauss, cosine) if (x is not None)]) == 1
+    
+    assert shape is not None
 
-    if gauss is not None:
-        return (-0.5 * ((z - 0.5 * L) / gauss["sigma"]).square()).exp()
+    if shape == 'gauss':
+        assert 'sigma' in params.keys()
+        return (-0.5 * ((z - 0.5 * L) / params["sigma"]).square()).exp()
 
-    if cosine is not None:
-        return ((2 * np.pi / L) * z).cos()
+
+    if shape == 'cosine': 
+        assert 'n' in params.keys() # periodicity
+        return ((2 * params["n"] * np.pi / L) * z).cos()
 
     return z  # Should never be encountered
 
