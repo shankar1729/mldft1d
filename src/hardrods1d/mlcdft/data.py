@@ -59,8 +59,8 @@ def fuse_data(data_arr: Sequence[Data]) -> List[Data]:
         # Find entries with same grid and n_bulk as first one:
         ref_grid1d = remainder[0].grid1d
         ref_n_bulk = remainder[0].n_bulk
-        same_grid = []
-        next_remainder = []
+        same_grid: List[Data] = []
+        next_remainder: List[Data] = []
         for data in remainder:
             (
                 same_grid
@@ -87,6 +87,12 @@ def fuse_data(data_arr: Sequence[Data]) -> List[Data]:
 def main() -> None:
     for filename in sys.argv[1:]:
         print(Data(filename))
+
+
+def random_split(
+    data: Sequence[Data], counts: Sequence[int]
+) -> Sequence[Sequence[Data]]:
+    return torch.utils.data.random_split(data, counts)  # type: ignore
 
 
 @functools.lru_cache()

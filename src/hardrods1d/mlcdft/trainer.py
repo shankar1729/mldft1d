@@ -32,9 +32,9 @@ class Trainer(torch.nn.Module):  # type: ignore
         # Split into train and test sets:
         train_count = int(len(data) * train_fraction)
         test_count = len(data) - train_count
-        self.data_train, self.data_test = torch.utils.data.random_split(
+        self.data_train, self.data_test = hr.mlcdft.random_split(
             data, [train_count, test_count]
-        )
+        )  # type: ignore
 
         # Fuse and report  train and test sets:
         qp.log.info("\nTraining set:")
