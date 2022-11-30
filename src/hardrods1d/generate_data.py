@@ -2,7 +2,6 @@ import qimpy as qp
 import numpy as np
 import hardrods1d as hr
 import torch
-from typing import Optional
 import h5py
 import yaml
 import sys
@@ -58,21 +57,17 @@ def get_V(
     z: torch.Tensor,
     L: float,
     *,
-    #gauss: Optional[dict] = None,
-    #cosine: Optional[dict] = None,
-    shape: str = 'gauss', # gauss perturbation by default
-    params: Optional[dict] = None
+    params: dict,
+    shape: str = "gauss",  # gauss perturbation by default
 ) -> torch.Tensor:
-    
-    assert shape is not None
 
-    if shape == 'gauss':
-        assert 'sigma' in params.keys()
+    if shape == "gauss":
+        assert "sigma" in params.keys()
         return (-0.5 * ((z - 0.5 * L) / params["sigma"]).square()).exp()
 
-
-    if shape == 'cosine': 
-        assert 'n' in params.keys() # periodicity
+    if shape == "cosine":
+        assert params is not None
+        assert "n" in params.keys()  # periodicity
         return ((2 * params["n"] * np.pi / L) * z).cos()
 
     return z  # Should never be encountered
