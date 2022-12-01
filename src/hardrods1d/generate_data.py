@@ -1,10 +1,8 @@
 import qimpy as qp
 import numpy as np
 import hardrods1d as hr
-import torch
 import h5py
 import sys
-from typing import Dict, Any
 
 
 def run(
@@ -24,7 +22,7 @@ def run(
     n0 = cdft.n
 
     qp.log.info(f"mu = {cdft.mu}")
-    V = qp.grid.FieldR(grid1d.grid, data=get_V(grid1d.z, grid1d.L, **Vshape))
+    V = qp.grid.FieldR(grid1d.grid, data=hr.v_shape.get(grid1d.z, grid1d.L, **Vshape))
 
     lbda_arr = np.arange(lbda["min"], lbda["max"], lbda["step"])
     E = np.zeros_like(lbda_arr)
@@ -51,21 +49,6 @@ def run(
     f.attrs["T"] = T
     f.attrs["R"] = R
     f.close()
-
-
-def get_V(z: torch.Tensor, L: float, *, shape: str, **kwargs) -> torch.Tensor:
-    return get_V_map[shape](z, L, **kwargs)  # type: ignore
-
-
-def get_V_gauss(z: torch.Tensor, L: float, *, sigma: float) -> torch.Tensor:
-    return (-0.5 * ((z - 0.5 * L) / sigma).square()).exp()
-
-
-def get_V_cosine(z: torch.Tensor, L: float, *, n: int = 1) -> torch.Tensor:
-    return ((2 * n * np.pi / L) * z).cos()
-
-
-get_V_map: Dict[str, Any] = {"gauss": get_V_gauss, "cosine": get_V_cosine}
 
 
 def main() -> None:
