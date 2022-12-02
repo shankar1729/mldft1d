@@ -29,8 +29,6 @@ def plot_data(data_file: str) -> None:
     plt.xlabel(r"$z$")
     plt.ylabel(r"$n(z)$")
     plt.xlim(z.min(), z.max())
-    plt.ylim(0, None)
-    plt.yscale("symlog")
     # --- add colorbar
     sm = mpl.cm.ScalarMappable(cmap=cmap, norm=normalize)
     sm.set_array([])

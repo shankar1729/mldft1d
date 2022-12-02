@@ -22,7 +22,7 @@ def run(
     n0 = cdft.n
 
     qp.log.info(f"mu = {cdft.mu}")
-    V = qp.grid.FieldR(grid1d.grid, data=hr.v_shape.get(grid1d.z, grid1d.L, **Vshape))
+    V = hr.v_shape.get(grid1d, **Vshape)
 
     lbda_arr = np.arange(lbda["min"], lbda["max"], lbda["step"])
     E = np.zeros_like(lbda_arr)
