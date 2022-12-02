@@ -15,12 +15,7 @@ def main():
 
     # Create external potential:
     V0 = 3 * T
-    Vsigma = 0.1
-    V = qp.grid.FieldR(
-        grid1d.grid,
-        data=(0.5 * V0)
-        * ((0.4 * grid1d.L - (grid1d.z - 0.5 * grid1d.L).abs()) / Vsigma).erfc(),
-    )
+    V = V0 * hr.v_shape.get(grid1d, shape="rectangular", sigma=0.1, duty=0.2)
 
     # Create exact functional:
     cdfts = {}
