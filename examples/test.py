@@ -9,13 +9,13 @@ def main():
     qp.log.info("Using QimPy " + qp.__version__)
     qp.rc.init()
 
-    grid1d = hr.Grid1D(L=40.0, dz=0.01)
+    grid1d = hr.Grid1D(L=20.0, dz=0.05)
     n_bulk = 0.6
     T = 1.0
 
     # Create external potential:
-    V0 = 3 * T
-    V = V0 * hr.v_shape.get(grid1d, shape="rectangular", sigma=0.1, duty=0.2)
+    V0 = 0.5 * T
+    V = V0 * hr.v_shape.get(grid1d, shape="rectangular", sigma=0.1, duty=0.4)
 
     # Create exact functional:
     cdfts = {}
