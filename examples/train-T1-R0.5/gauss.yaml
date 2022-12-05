@@ -2,7 +2,7 @@ L: 20
 dz: 0.05
 R: 0.5
 T: 1.0
-n_bulk: 0.6
+n_bulk: ${n_bulk}
 
 Vshape:
   shape: gauss
@@ -13,4 +13,4 @@ lbda:
   max: +10.0
   step: 0.2
 
-filename: gauss_${sigma}.h5
+filename: gauss_n${n_bulk}_sigma${sigma}.h5

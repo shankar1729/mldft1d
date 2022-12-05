@@ -1,0 +1,15 @@
+L: ${L}
+dz: 0.05
+R: 0.5
+T: 1.0
+n_bulk: ${n_bulk}
+
+Vshape:
+  shape: cosine
+
+lbda:
+  min: -10.0
+  max: +10.0
+  step: 0.2
+
+filename: cosine_n${n_bulk}_L${L}.h5

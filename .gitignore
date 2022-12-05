@@ -132,5 +132,6 @@ dmypy.json
 
 # Data files
 *.h5
+*.log
 mlcdft_params.dat
 Runs/

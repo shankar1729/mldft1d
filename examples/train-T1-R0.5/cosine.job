@@ -1,0 +1,12 @@
+#!/bin/bash
+#SBATCH -n 1 -N 1
+
+conda activate qimpy
+
+for n_bulk in 0.4 0.5 0.6 0.7 0.8; do
+	export n_bulk
+	for L in 1 2 5 10 20; do
+		export L
+		python -m hardrods1d.generate_data cosine.yaml
+	done
+done
