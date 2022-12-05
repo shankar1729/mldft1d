@@ -1,9 +1,11 @@
+from __future__ import annotations
 import os.path
 import sys
+import glob
 import torch
 import qimpy as qp
 import hardrods1d as hr
-from typing import Sequence
+from typing import Sequence, Union
 
 
 class Trainer(torch.nn.Module):  # type: ignore
@@ -16,7 +18,7 @@ class Trainer(torch.nn.Module):  # type: ignore
         self,
         functional: hr.mlcdft.Functional,
         filenames: Sequence[str],
-        train_fraction: float = 0.8,
+        train_fraction: float,
     ) -> None:
         super().__init__()
         self.functional = functional
@@ -81,34 +83,47 @@ class Trainer(torch.nn.Module):  # type: ignore
         return loss_total / n_perturbations
 
 
-def main() -> None:
-    qp.utils.log_config()  # default set up to log from MPI head alone
-    qp.log.info("Using QimPy " + qp.__version__)
-    qp.rc.init()
-    torch.random.manual_seed(0)
-
-    # TODO: get all parameters from YAML input
-
-    # Initialize functional:
+def initialize_functional(
+    *,
+    T: float,
+    n_weights: int,
+    w_hidden_sizes: list[int],
+    f_ex_hidden_sizes: list[int],
+    load_params: str = "",
+) -> hr.mlcdft.Functional:
     functional = hr.mlcdft.Functional(
-        T=1.0,
-        w=hr.mlcdft.NNFunction(1, 2, [10, 10]),
-        f_ex=hr.mlcdft.NNFunction(2, 2, [10, 10]),
+        T=T,
+        w=hr.mlcdft.NNFunction(1, n_weights, w_hidden_sizes),
+        f_ex=hr.mlcdft.NNFunction(n_weights, n_weights, f_ex_hidden_sizes),
     )
-    params_filename = "mlcdft_params.dat"
-    if os.path.isfile(params_filename):
-        functional.load_state_dict(
-            torch.load(params_filename, map_location=qp.rc.device)
-        )
+    if load_params and os.path.isfile(load_params):
+        functional.load_state_dict(torch.load(load_params, map_location=qp.rc.device))
+    return functional
 
-    # Initialize trainer:
-    filenames = sys.argv[1:]
-    assert len(filenames)
-    trainer = Trainer(functional, filenames)
-    optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=1e-1)
 
-    # Train:
-    epochs = 300
+def load_data(
+    functional: hr.mlcdft.Functional,
+    *,
+    filenames: Union[str, Sequence[str]],
+    train_fraction: float = 0.8,
+) -> Trainer:
+    # Expand list of filenames:
+    filenames = [filenames] if isinstance(filenames, str) else filenames
+    filenames_expanded = sum([glob.glob(filename) for filename in filenames], start=[])
+    assert len(filenames_expanded)
+
+    # Create trainer with specified functional and data split:
+    return Trainer(functional, filenames_expanded, train_fraction)
+
+
+def run_training_loop(
+    trainer: Trainer,
+    *,
+    epochs: int,
+    learning_rate: float,
+    save_params: str,
+) -> None:
+    optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=learning_rate)
     qp.log.info(f"\nTraining for {epochs} epochs")
     for t in range(epochs):
         loss_train = trainer.train_loop(optimizer)
@@ -118,7 +133,33 @@ def main() -> None:
             f"  TestLoss: {loss_test:>7f}  t[s]: {qp.rc.clock():.1f}"
         )
     qp.log.info("Done!")
-    torch.save(trainer.functional.state_dict(), params_filename)
+    torch.save(trainer.functional.state_dict(), save_params)
+
+
+def run(
+    *,
+    functional: dict,
+    data: dict,
+    train: dict,
+) -> None:
+    torch.random.manual_seed(0)
+    functional = initialize_functional(**qp.utils.dict.key_cleanup(functional))
+    trainer = load_data(functional, **qp.utils.dict.key_cleanup(data))
+    run_training_loop(trainer, **qp.utils.dict.key_cleanup(train))
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        print("Usage: python -m hardrods1d.mlcdft.trainer <input.yaml>")
+        exit(1)
+    in_file = sys.argv[1]
+
+    qp.utils.log_config()  # default set up to log from MPI head alone
+    qp.log.info("Using QimPy " + qp.__version__)
+    qp.rc.init()
+
+    input_dict = qp.utils.dict.key_cleanup(qp.utils.yaml.load(in_file))
+    run(**input_dict)
 
 
 if __name__ == "__main__":

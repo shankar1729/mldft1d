@@ -22,9 +22,9 @@ def run(
     n0 = cdft.n
 
     qp.log.info(f"mu = {cdft.mu}")
-    V = hr.v_shape.get(grid1d, **Vshape)
+    V = hr.v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
 
-    lbda_arr = get_lbda_arr(**lbda)
+    lbda_arr = get_lbda_arr(**qp.utils.dict.key_cleanup(lbda))
     E = np.zeros_like(lbda_arr)
     n = np.zeros((len(E), len(hr.get1D(grid1d.z))))
 

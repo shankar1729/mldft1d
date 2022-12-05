@@ -1,0 +1,7 @@
+#!/bin/bash
+#SBATCH -p gpu -n 1 --gres=gpu:1 -o train.log
+
+export OMPI_MCA_opal_cuda_support=true
+export OMPI_OPTIONS="--mca btl ^openib --mca mtl psm2 --mca btl_smcuda_use_cuda_ipc 0"
+
+mpirun $OMPI_OPTIONS python -m hardrods1d.mlcdft.trainer train.yaml
