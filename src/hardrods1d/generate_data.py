@@ -24,7 +24,7 @@ def run(
     qp.log.info(f"mu = {cdft.mu}")
     V = hr.v_shape.get(grid1d, **Vshape)
 
-    lbda_arr = np.arange(lbda["min"], lbda["max"], lbda["step"])
+    lbda_arr = get_lbda_arr(**lbda)
     E = np.zeros_like(lbda_arr)
     n = np.zeros((len(E), len(hr.get1D(grid1d.z))))
 
@@ -49,6 +49,11 @@ def run(
     f.attrs["T"] = T
     f.attrs["R"] = R
     f.close()
+
+
+def get_lbda_arr(*, min: float, max: float, step: float) -> np.ndarray:
+    n_lbda = int(np.round((max - min) / step))
+    return min + step * np.arange(n_lbda + 1)
 
 
 def main() -> None:
