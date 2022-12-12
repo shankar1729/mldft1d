@@ -28,9 +28,8 @@ class Functional(torch.nn.Module):  # type: ignore
         assert f_ex.n_out == w.n_out
 
     def get_energy(self, n: qp.grid.FieldR, V_minus_mu: qp.grid.FieldR) -> qp.Energy:
-        Gmag = Functional.Gmag(n.grid)[None]
-        for i_batch_dim in range(len(n.data.shape) - 3):
-            Gmag = Gmag[None]
+        Gmag_shape = (1,) * (len(n.data.shape) - 2) + n.grid.shapeH
+        Gmag = Functional.Gmag(n.grid).view(Gmag_shape)
         w_tilde = self.w(Gmag)
         n_bar = n[None, ...].convolve(w_tilde)
 
