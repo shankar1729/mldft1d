@@ -27,10 +27,14 @@ class Functional(torch.nn.Module):  # type: ignore
         assert w.n_out == f_ex.n_in
         assert f_ex.n_out == w.n_out
 
+    def get_w_tilde(self, grid: qp.grid.Grid, n_dim_tot: int) -> torch.Tensor:
+        """Compute weights for specified grid and total dimension count."""
+        Gmag_shape = (1,) * (n_dim_tot - 3) + grid.shapeH
+        Gmag = Functional.Gmag(grid).view(Gmag_shape)
+        return self.w(Gmag)
+
     def get_energy(self, n: qp.grid.FieldR, V_minus_mu: qp.grid.FieldR) -> qp.Energy:
-        Gmag_shape = (1,) * (len(n.data.shape) - 2) + n.grid.shapeH
-        Gmag = Functional.Gmag(n.grid).view(Gmag_shape)
-        w_tilde = self.w(Gmag)
+        w_tilde = self.get_w_tilde(n.grid, len(n.data.shape) + 1)
         n_bar = n[None, ...].convolve(w_tilde)
 
         energy = qp.Energy()
