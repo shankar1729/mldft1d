@@ -8,8 +8,9 @@ functional:
 data:
   filenames: ../data-T1-R0.5/*.h5
   train-fraction: 0.8
+  batch-size: 10
 
 train:
-  epochs: 300
+  epochs: 3000
   learning-rate: 1.0E-5
   save-params: mlcdft_params.dat

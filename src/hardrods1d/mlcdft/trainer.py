@@ -11,7 +11,7 @@ from typing import Sequence, Union
 class Trainer(torch.nn.Module):  # type: ignore
 
     functional: hr.mlcdft.Functional
-    data_train: Sequence[hr.mlcdft.Data]  #: Training data
+    data_train: Sequence[Sequence[hr.mlcdft.Data]]  #: Training data
     data_test: Sequence[hr.mlcdft.Data]  #: Testing data
 
     def __init__(
@@ -19,6 +19,7 @@ class Trainer(torch.nn.Module):  # type: ignore
         functional: hr.mlcdft.Functional,
         filenames: Sequence[str],
         train_fraction: float,
+        batch_size: int,
     ) -> None:
         super().__init__()
         self.functional = functional
@@ -34,16 +35,23 @@ class Trainer(torch.nn.Module):  # type: ignore
         # Split into train and test sets:
         train_count = int(len(data) * train_fraction)
         test_count = len(data) - train_count
-        self.data_train, self.data_test = hr.mlcdft.random_split(
-            data, [train_count, test_count]
-        )  # type: ignore
+        data_train, data_test = hr.mlcdft.random_split(data, [train_count, test_count])
 
-        # Fuse and report  train and test sets:
+        # Split train set into batches, fuse and report:
+        n_train = len(data_train)
+        n_batches = qp.utils.ceildiv(n_train, batch_size)
+        train_order = torch.randperm(n_train)
+        self.data_train = []
         qp.log.info("\nTraining set:")
-        self.data_train = hr.mlcdft.fuse_data(self.data_train)
+        for i_batch in range(n_batches):
+            qp.log.info(f" Batch {i_batch + 1}:")
+            batch_start = (i_batch * n_train) // n_batches
+            batch_stop = ((i_batch + 1) * n_train) // n_batches
+            data_batch = [data_train[i] for i in train_order[batch_start:batch_stop]]
+            self.data_train.append(hr.mlcdft.fuse_data(data_batch))
 
         qp.log.info("\nTest set:")
-        self.data_test = hr.mlcdft.fuse_data(self.data_test)
+        self.data_test = hr.mlcdft.fuse_data(data_test)
 
     def forward(self, data: hr.mlcdft.Data) -> torch.Tensor:
         """Compute loss function for one complete perturbation data-set"""
@@ -66,14 +74,15 @@ class Trainer(torch.nn.Module):  # type: ignore
         """Run training loop and return mean loss (over epoch)."""
         loss_total = 0.0
         n_perturbations = 0
-        for data in self.data_train:
-            # Collect total loss and gradient over batch
+        for data_batch in self.data_train:
+            # Step using total gradient over batch:
             optimizer.zero_grad()
-            loss = self(data)
-            loss.backward()
+            for data in data_batch:
+                loss = self(data)
+                loss.backward()
+                loss_total += loss.item()
+                n_perturbations += data.n_perturbations
             optimizer.step()
-            loss_total += loss.item()
-            n_perturbations += data.n_perturbations
         return loss_total / n_perturbations
 
     def test_loop(self) -> float:
@@ -106,14 +115,17 @@ def load_data(
     *,
     filenames: Union[str, Sequence[str]],
     train_fraction: float = 0.8,
+    batch_size: int = 10,
 ) -> Trainer:
     # Expand list of filenames:
     filenames = [filenames] if isinstance(filenames, str) else filenames
-    filenames_expanded = sum([glob.glob(filename) for filename in filenames], start=[])
+    filenames_expanded: list[str] = sum(
+        [glob.glob(filename) for filename in filenames], start=[]
+    )
     assert len(filenames_expanded)
 
     # Create trainer with specified functional and data split:
-    return Trainer(functional, filenames_expanded, train_fraction)
+    return Trainer(functional, filenames_expanded, train_fraction, batch_size)
 
 
 def run_training_loop(
@@ -143,8 +155,10 @@ def run(
     train: dict,
 ) -> None:
     torch.random.manual_seed(0)
-    functional = initialize_functional(**qp.utils.dict.key_cleanup(functional))
-    trainer = load_data(functional, **qp.utils.dict.key_cleanup(data))
+    trainer = load_data(
+        initialize_functional(**qp.utils.dict.key_cleanup(functional)),
+        **qp.utils.dict.key_cleanup(data),
+    )
     run_training_loop(trainer, **qp.utils.dict.key_cleanup(train))
 
 
