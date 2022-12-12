@@ -1,10 +1,6 @@
 from __future__ import annotations
 import qimpy as qp
 import torch
-from typing import TypeVar
-
-
-NNInput = TypeVar("NNInput", torch.Tensor, qp.grid.FieldR)
 
 
 class NNFunction(torch.nn.Module):
@@ -39,10 +35,3 @@ class NNFunction(torch.nn.Module):
         if batch_shape:
             x = x.T.unflatten(1, batch_shape)  # restore batch dimensions
         return x
-
-    def __call__(self, x: NNInput) -> NNInput:
-        """Evaluate NN function."""
-        if isinstance(x, torch.Tensor):
-            return self.forward(x)
-        else:
-            return qp.grid.FieldR(x.grid, data=self.forward(x.data))

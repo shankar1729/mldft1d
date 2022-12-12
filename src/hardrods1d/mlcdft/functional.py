@@ -1,6 +1,10 @@
 import qimpy as qp
 import torch
+from typing import TypeVar
 from .nn_function import NNFunction
+
+
+NNInput = TypeVar("NNInput", torch.Tensor, qp.grid.FieldR)
 
 
 class Functional(torch.nn.Module):  # type: ignore
@@ -38,13 +42,18 @@ class Functional(torch.nn.Module):  # type: ignore
         Gmag = Functional.Gmag(grid).view(Gmag_shape)
         return self.w(Gmag) - w_zero
 
+    def get_f_ex(self, n: NNInput) -> NNInput:
+        if isinstance(n, torch.Tensor):
+            return self.f_ex(n)
+        else:
+            return qp.grid.FieldR(n.grid, data=self.get_f_ex(n.data))
+
     def get_energy(self, n: qp.grid.FieldR, V_minus_mu: qp.grid.FieldR) -> qp.Energy:
         w_tilde = self.get_w_tilde(n.grid, len(n.data.shape) + 1)
         n_bar = n[None, ...].convolve(w_tilde)
-
         energy = qp.Energy()
         energy["Omega0"] = n ^ (self.T * n.log() + V_minus_mu)  # Ideal-gas part
-        energy["Fex"] = self.T * (n_bar ^ self.f_ex(n_bar)).sum(dim=0)  # Excess part
+        energy["Fex"] = self.T * (n_bar ^ self.get_f_ex(n_bar)).sum(dim=0)  # Excess
         return energy
 
     def get_mu(self, n_bulk: float, create_graph: bool = False) -> torch.Tensor:
@@ -54,7 +63,7 @@ class Functional(torch.nn.Module):  # type: ignore
         n = torch.tensor(n_bulk)
         n.requires_grad = True
         n_bar = w_bulk * n
-        energy_density = self.T * (n * n.log() + n_bar @ self.f_ex(n_bar))
+        energy_density = self.T * (n * n.log() + n_bar @ self.get_f_ex(n_bar))
         return torch.autograd.grad(energy_density, n, create_graph=create_graph)[0]
 
     @staticmethod
