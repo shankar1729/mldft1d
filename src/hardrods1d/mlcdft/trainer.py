@@ -114,7 +114,7 @@ def run_training_loop(
     *,
     epochs: int,
     learning_rate: float,
-    save_params: str,
+    save_file: str,
     save_interval: int,
 ) -> None:
     optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=learning_rate)
@@ -131,8 +131,8 @@ def run_training_loop(
         if epoch % save_interval == 0:
             if loss_test < best_loss_test:
                 best_loss_test = loss_test
-                trainer.functional.save(save_params)
-                qp.log.info(f"Saved parameters to '{save_params}'")
+                trainer.functional.save(save_file)
+                qp.log.info(f"Saved parameters to '{save_file}'")
             else:
                 qp.log.info(f"Skipped save because TestLoss >= {best_loss_test} (best)")
     qp.log.info("Done!")
@@ -146,7 +146,7 @@ def run(
 ) -> None:
     torch.random.manual_seed(0)
     trainer = load_data(
-        hr.mlcdft.Functional.initialize(**qp.utils.dict.key_cleanup(functional)),
+        hr.mlcdft.Functional.load(**qp.utils.dict.key_cleanup(functional)),
         **qp.utils.dict.key_cleanup(data),
     )
     run_training_loop(trainer, **qp.utils.dict.key_cleanup(train))

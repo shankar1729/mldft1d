@@ -20,40 +20,45 @@ class Functional(torch.nn.Module):  # type: ignore
         self,
         *,
         T: float,
-        w: NNFunction,
-        f_ex: NNFunction,
-    ) -> None:
-        """Initializes to bulk fluid with no external potential."""
-        super().__init__()
-        self.T = T
-        self.w = w
-        self.f_ex = f_ex
-        # Check dimensions:
-        assert w.n_in == 1
-        assert w.n_out == f_ex.n_in
-        assert f_ex.n_out == w.n_out
-
-    @classmethod
-    def initialize(
-        cls,
-        *,
-        T: float,
         n_weights: int,
         w_hidden_sizes: list[int],
         f_ex_hidden_sizes: list[int],
-        load_params: str = "",
+    ) -> None:
+        """Initializes functional with specified sizes (and random parameters)."""
+        super().__init__()
+        self.T = T
+        self.w = NNFunction(1, n_weights, w_hidden_sizes)
+        self.f_ex = NNFunction(n_weights, n_weights, f_ex_hidden_sizes)
+
+    @classmethod
+    def load(
+        cls,
+        *,
+        load_file: str = "",
+        **kwargs,
     ) -> Functional:
         """
-        Initialize functional from specified sizes or from params file if `load_params`.
+        Initialize functional from `kwargs` or from params file if given `load_file`.
+        Any parameter in `kwargs` must be consistent with the params file, if given.
         """
-        functional = Functional(
-            T=T,
-            w=NNFunction(1, n_weights, w_hidden_sizes),
-            f_ex=NNFunction(n_weights, n_weights, f_ex_hidden_sizes),
-        )
-        if load_params and os.path.isfile(load_params):
-            params = torch.load(load_params, map_location=qp.rc.device)
-            functional.load_state_dict(params["state"])
+        params = dict(**kwargs)
+        state = {}
+
+        # Merge / check parameters from file, if available:
+        if load_file and os.path.isfile(load_file):
+            params_in = torch.load(load_file, map_location=qp.rc.device)
+            for key, value in params_in.items():
+                if key == "state":
+                    state = value
+                elif key in params:
+                    assert params[key] == value
+                else:
+                    params[key] = value
+
+        # Create functional and load state if available:
+        functional = Functional(**params)
+        if state:
+            functional.load_state_dict(state)
         return functional
 
     def save(self, filename: str) -> None:

@@ -1,4 +1,3 @@
-import torch
 import qimpy as qp
 import hardrods1d as hr
 import matplotlib.pyplot as plt
@@ -17,22 +16,15 @@ def main():
     V0 = 3.0 * T
     V = V0 * hr.v_shape.get(grid1d, shape="rectangular", sigma=0.1, duty=0.4)
 
-    # Create exact functional:
-    cdfts = {}
-    cdfts["Exact"] = hr.HardRodsFMT(grid1d, R=0.5, T=T, n_bulk=n_bulk)
-
-    # Create MLCDFT approximation:
-    functional = hr.mlcdft.Functional(
-        T=T,
-        w=hr.mlcdft.NNFunction(1, 2, [30, 30]),
-        f_ex=hr.mlcdft.NNFunction(2, 2, [30, 30]),
-    )
-    functional.load_state_dict(
-        torch.load("mlcdft_params.dat", map_location=qp.rc.device)
-    )
-    cdfts["ML"] = hr.mlcdft.Minimizer(
-        functional=functional, grid1d=grid1d, n_bulk=n_bulk
-    )
+    # Create functionals:
+    cdfts = {
+        "Exact": hr.HardRodsFMT(grid1d, R=0.5, T=T, n_bulk=n_bulk),
+        "ML": hr.mlcdft.Minimizer(
+            functional=hr.mlcdft.Functional.load(load_file="mlcdft_params.dat"),
+            grid1d=grid1d,
+            n_bulk=n_bulk,
+        ),
+    }
 
     for cdft in cdfts.values():
         cdft.V = V
