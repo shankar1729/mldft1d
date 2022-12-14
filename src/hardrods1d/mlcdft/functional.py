@@ -1,5 +1,7 @@
+from __future__ import annotations
 import qimpy as qp
 import torch
+import os
 from typing import TypeVar
 from .nn_function import NNFunction
 
@@ -30,6 +32,34 @@ class Functional(torch.nn.Module):  # type: ignore
         assert w.n_in == 1
         assert w.n_out == f_ex.n_in
         assert f_ex.n_out == w.n_out
+
+    @classmethod
+    def initialize(
+        cls,
+        *,
+        T: float,
+        n_weights: int,
+        w_hidden_sizes: list[int],
+        f_ex_hidden_sizes: list[int],
+        load_params: str = "",
+    ) -> Functional:
+        """
+        Initialize functional from specified sizes or from params file if `load_params`.
+        """
+        functional = Functional(
+            T=T,
+            w=NNFunction(1, n_weights, w_hidden_sizes),
+            f_ex=NNFunction(n_weights, n_weights, f_ex_hidden_sizes),
+        )
+        if load_params and os.path.isfile(load_params):
+            functional.load_state_dict(
+                torch.load(load_params, map_location=qp.rc.device)
+            )
+        return functional
+
+    def save(self, filename: str):
+        """Save parameters to specified filename."""
+        torch.save(self.state_dict(), filename)
 
     def get_w_tilde(self, grid: qp.grid.Grid, n_dim_tot: int) -> torch.Tensor:
         """Compute weights for specified grid and total dimension count."""

@@ -1,5 +1,4 @@
 from __future__ import annotations
-import os.path
 import sys
 import glob
 import torch
@@ -92,24 +91,6 @@ class Trainer(torch.nn.Module):  # type: ignore
         return loss_total / n_perturbations
 
 
-def initialize_functional(
-    *,
-    T: float,
-    n_weights: int,
-    w_hidden_sizes: list[int],
-    f_ex_hidden_sizes: list[int],
-    load_params: str = "",
-) -> hr.mlcdft.Functional:
-    functional = hr.mlcdft.Functional(
-        T=T,
-        w=hr.mlcdft.NNFunction(1, n_weights, w_hidden_sizes),
-        f_ex=hr.mlcdft.NNFunction(n_weights, n_weights, f_ex_hidden_sizes),
-    )
-    if load_params and os.path.isfile(load_params):
-        functional.load_state_dict(torch.load(load_params, map_location=qp.rc.device))
-    return functional
-
-
 def load_data(
     functional: hr.mlcdft.Functional,
     *,
@@ -145,7 +126,7 @@ def run_training_loop(
             f"  TestLoss: {loss_test:>7f}  t[s]: {qp.rc.clock():.1f}"
         )
     qp.log.info("Done!")
-    torch.save(trainer.functional.state_dict(), save_params)
+    trainer.functional.save(save_params)
 
 
 def run(
@@ -156,7 +137,7 @@ def run(
 ) -> None:
     torch.random.manual_seed(0)
     trainer = load_data(
-        initialize_functional(**qp.utils.dict.key_cleanup(functional)),
+        hr.mlcdft.Functional.initialize(**qp.utils.dict.key_cleanup(functional)),
         **qp.utils.dict.key_cleanup(data),
     )
     run_training_loop(trainer, **qp.utils.dict.key_cleanup(train))
