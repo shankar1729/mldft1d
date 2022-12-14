@@ -62,7 +62,7 @@ class Functional(torch.nn.Module):  # type: ignore
     def get_mu(self, n_bulk: float, create_graph: bool = False) -> torch.Tensor:
         """Compute chemical potential that will produce target density `n_bulk`."""
         # Bulk condition: (d/dn) [f_id(n) + f_ex(w * n)] = mu
-        n = torch.tensor(n_bulk)
+        n = torch.tensor(n_bulk, device=qp.rc.device)
         n.requires_grad = True
         n_bar = n.repeat(self.w.n_out)
         energy_density = self.T * (n * n.log() + n_bar @ self.get_f_ex(n_bar))
