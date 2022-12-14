@@ -12,6 +12,7 @@ class NNFunction(torch.nn.Module):
         super().__init__()
         self.n_in = n_in
         self.n_out = n_out
+        self.n_hidden = n_hidden
         n_nodes = [n_in] + n_hidden + [n_out]
         self.layers = torch.nn.ModuleList(
             [

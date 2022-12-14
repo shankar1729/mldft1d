@@ -52,14 +52,20 @@ class Functional(torch.nn.Module):  # type: ignore
             f_ex=NNFunction(n_weights, n_weights, f_ex_hidden_sizes),
         )
         if load_params and os.path.isfile(load_params):
-            functional.load_state_dict(
-                torch.load(load_params, map_location=qp.rc.device)
-            )
+            params = torch.load(load_params, map_location=qp.rc.device)
+            functional.load_state_dict(params["state"])
         return functional
 
-    def save(self, filename: str):
+    def save(self, filename: str) -> None:
         """Save parameters to specified filename."""
-        torch.save(self.state_dict(), filename)
+        params = dict(
+            T=self.T,
+            n_weights=self.w.n_out,
+            w_hidden_sizes=self.w.n_hidden,
+            f_ex_hidden_sizes=self.f_ex.n_hidden,
+            state=self.state_dict(),
+        )
+        torch.save(params, filename)
 
     def get_w_tilde(self, grid: qp.grid.Grid, n_dim_tot: int) -> torch.Tensor:
         """Compute weights for specified grid and total dimension count."""
