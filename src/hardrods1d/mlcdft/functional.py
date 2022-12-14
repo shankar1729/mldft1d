@@ -44,7 +44,10 @@ class Functional(torch.nn.Module):  # type: ignore
 
     def get_f_ex(self, n: NNInput) -> NNInput:
         if isinstance(n, torch.Tensor):
-            return self.f_ex(n)
+            n_zero = torch.zeros(
+                (self.f_ex.n_in,) + (1,) * (len(n.shape) - 1), device=n.device
+            )
+            return self.f_ex(n) - self.f_ex(n_zero)
         else:
             return qp.grid.FieldR(n.grid, data=self.get_f_ex(n.data))
 
