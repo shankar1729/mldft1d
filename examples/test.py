@@ -1,26 +1,31 @@
+import sys
 import qimpy as qp
 import hardrods1d as hr
 import matplotlib.pyplot as plt
 
 
-def main():
-    qp.utils.log_config()  # default set up to log from MPI head alone
-    qp.log.info("Using QimPy " + qp.__version__)
-    qp.rc.init()
-
-    grid1d = hr.Grid1D(L=20.0, dz=0.05)
-    n_bulk = 0.6
-    T = 1.0
-
-    # Create external potential:
-    V0 = 3.0 * T
-    V = V0 * hr.v_shape.get(grid1d, shape="rectangular", sigma=0.1, duty=0.4)
+def run(
+    *,
+    L: float,
+    dz: float,
+    R: float,
+    T: float,
+    n_bulk: float,
+    Vshape: dict,
+    lbda: float,
+    functional: dict,
+):
+    # Create grid and external potential:
+    grid1d = hr.Grid1D(L=L, dz=dz)
+    V = lbda * hr.v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
 
     # Create functionals:
     cdfts = {
-        "Exact": hr.HardRodsFMT(grid1d, R=0.5, T=T, n_bulk=n_bulk),
+        "Exact": hr.HardRodsFMT(grid1d, R=R, T=T, n_bulk=n_bulk),
         "ML": hr.mlcdft.Minimizer(
-            functional=hr.mlcdft.Functional.load(load_file="mlcdft_params.dat"),
+            functional=hr.mlcdft.Functional.load(
+                **qp.utils.dict.key_cleanup(functional)
+            ),
             grid1d=grid1d,
             n_bulk=n_bulk,
         ),
@@ -35,7 +40,7 @@ def main():
     if qp.rc.is_head:
         plt.figure(1, figsize=(10, 6))
         z1d = hr.get1D(grid1d.z)
-        plt.plot(z1d, hr.get1D(V.data) / V0, label=f"$V/V_0$ (with $V_0 = {V0}$)")
+        plt.plot(z1d, hr.get1D(V.data) / lbda, label=f"$V/V_0$ (with $V_0 = {lbda}$)")
         for cdft_name, cdft in cdfts.items():
             DeltaE = float(cdft.E) - cdft.mu * n_bulk * grid1d.L
             qp.log.info(f"{cdft_name:>7s}:  mu: {cdft.mu:>7f} DeltaE: {DeltaE:>9f}")
@@ -46,6 +51,20 @@ def main():
         plt.legend()
         plt.savefig("test.pdf", bbox_inches="tight")
         plt.show()
+
+
+def main() -> None:
+    if len(sys.argv) < 2:
+        print("Usage: python test.py <input.yaml>")
+        exit(1)
+    in_file = sys.argv[1]
+
+    qp.utils.log_config()  # default set up to log from MPI head alone
+    qp.log.info("Using QimPy " + qp.__version__)
+    qp.rc.init()
+
+    input_dict = qp.utils.dict.key_cleanup(qp.utils.yaml.load(in_file))
+    run(**input_dict)
 
 
 if __name__ == "__main__":
