@@ -112,7 +112,7 @@ def random_batch_split(
 def get_grid1d(L: float, dz: float) -> hr.Grid1D:
     """Get/make a 1D grid of length `L` and spacing `dz` (cached by L, dz)."""
     qp.log.info(f"\n----- Making 1D grid for {L = :.2f} and {dz = :.3f} -----")
-    return hr.Grid1D(L=L, dz=dz)
+    return hr.Grid1D(L=L, dz=dz, parallel=False)  # use data-parallel instead
 
 
 if __name__ == "__main__":

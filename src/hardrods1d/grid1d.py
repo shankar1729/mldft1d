@@ -12,14 +12,15 @@ class Grid1D:
     Gmag: torch.Tensor
     z: torch.Tensor
 
-    def __init__(self, *, L: float, dz: float) -> None:
+    def __init__(self, *, L: float, dz: float, parallel: bool = True) -> None:
         """Create QimPy lattice and grid suitable for 1D calculations.
         The x and y directions are set to have a single grid point and length 1.
         The z direction is periodic with length `L` and nominal spacing `dz`.
+        The grid is split over MPI if `parallel` = True.
         """
         self.L = L
         self.lattice = qp.lattice.Lattice(system="orthorhombic", a=1.0, b=1.0, c=L)
-        process_grid = qp.utils.ProcessGrid(qp.rc.comm, "rkb", (1, 1, -1))
+        process_grid = qp.utils.ProcessGrid(qp.rc.comm, "rkb", (1, -1, 1))
         ions = qp.ions.Ions(lattice=self.lattice, process_grid=process_grid)
         symmetries = qp.symmetries.Symmetries(
             lattice=self.lattice,
@@ -32,7 +33,7 @@ class Grid1D:
         self.grid = qp.grid.Grid(
             lattice=self.lattice,
             symmetries=symmetries,
-            comm=qp.rc.comm,
+            comm=(qp.rc.comm if parallel else None),
             shape=(1, 1, Nz),
         )
         iG = self.grid.get_mesh("H").to(torch.double)  # half-space
