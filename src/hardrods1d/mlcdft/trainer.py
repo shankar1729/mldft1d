@@ -4,13 +4,13 @@ import glob
 import torch
 import qimpy as qp
 import hardrods1d as hr
-from typing import Sequence, Union
+from typing import Sequence, Iterable, Union
 
 
 class Trainer(torch.nn.Module):  # type: ignore
 
     functional: hr.mlcdft.Functional
-    data_train: Sequence[Sequence[hr.mlcdft.Data]]  #: Training data
+    data_train: Sequence[hr.mlcdft.Data]  #: Training data
     data_test: Sequence[hr.mlcdft.Data]  #: Testing data
 
     def __init__(
@@ -18,7 +18,6 @@ class Trainer(torch.nn.Module):  # type: ignore
         functional: hr.mlcdft.Functional,
         filenames: Sequence[str],
         train_fraction: float,
-        batch_size: int,
     ) -> None:
         super().__init__()
         self.functional = functional
@@ -36,19 +35,13 @@ class Trainer(torch.nn.Module):  # type: ignore
         test_count = len(data) - train_count
         data_train, data_test = hr.mlcdft.random_split(data, [train_count, test_count])
 
-        # Split train set into batches, fuse and report:
-        n_train = len(data_train)
-        n_batches = qp.utils.ceildiv(n_train, batch_size)
-        train_order = torch.randperm(n_train)
-        self.data_train = []
+        # Report training set:
         qp.log.info("\nTraining set:")
-        for i_batch in range(n_batches):
-            qp.log.info(f" Batch {i_batch + 1}:")
-            batch_start = (i_batch * n_train) // n_batches
-            batch_stop = ((i_batch + 1) * n_train) // n_batches
-            data_batch = [data_train[i] for i in train_order[batch_start:batch_stop]]
-            self.data_train.append(hr.mlcdft.fuse_data(data_batch))
+        for data_train_i in data_train:
+            qp.log.info(f"  {data_train_i}")
+        self.data_train = data_train
 
+        # Fuse and report test set:
         qp.log.info("\nTest set:")
         self.data_test = hr.mlcdft.fuse_data(data_test)
 
@@ -69,11 +62,11 @@ class Trainer(torch.nn.Module):  # type: ignore
         # Compute loss from error in V:
         return Verr.square().sum()
 
-    def train_loop(self, optimizer) -> float:
+    def train_loop(self, optimizer: torch.optim.Optimizer, batch_size: int) -> float:
         """Run training loop and return mean loss (over epoch)."""
         loss_total = 0.0
         n_perturbations = 0
-        for data_batch in self.data_train:
+        for data_batch in hr.mlcdft.random_batch_split(self.data_train, batch_size):
             # Step using total gradient over batch:
             optimizer.zero_grad()
             for data in data_batch:
@@ -96,7 +89,6 @@ def load_data(
     *,
     filenames: Union[str, Sequence[str]],
     train_fraction: float = 0.8,
-    batch_size: int = 10,
 ) -> Trainer:
     # Expand list of filenames:
     filenames = [filenames] if isinstance(filenames, str) else filenames
@@ -106,23 +98,33 @@ def load_data(
     assert len(filenames_expanded)
 
     # Create trainer with specified functional and data split:
-    return Trainer(functional, filenames_expanded, train_fraction, batch_size)
+    return Trainer(functional, filenames_expanded, train_fraction)
+
+
+def get_optimizer(
+    params: Iterable[torch.Tensor], method: str, **method_kwargs
+) -> torch.optim.Optimizer:
+    qp.log.info(f"\nCreating {method} optimizer with {method_kwargs}")
+    Optimizer = getattr(torch.optim, method)  # select optimizer class
+    return Optimizer(params, **method_kwargs)
 
 
 def run_training_loop(
     trainer: Trainer,
     *,
-    epochs: int,
-    learning_rate: float,
     save_file: str,
     save_interval: int,
+    epochs: int,
+    batch_size: int,
+    method: str,
+    **method_kwargs,
 ) -> None:
-    optimizer = torch.optim.SGD(trainer.functional.parameters(), lr=learning_rate)
-    qp.log.info(f"\nTraining for {epochs} epochs")
+    optimizer = get_optimizer(trainer.functional.parameters(), method, **method_kwargs)
+    qp.log.info(f"Training for {epochs} epochs")
     best_loss_test = trainer.test_loop()
     qp.log.info(f"Initial TestLoss: {best_loss_test:>7f}  t[s]: {qp.rc.clock():.1f}")
     for epoch in range(1, epochs + 1):
-        loss_train = trainer.train_loop(optimizer)
+        loss_train = trainer.train_loop(optimizer, batch_size)
         loss_test = trainer.test_loop()
         qp.log.info(
             f"Epoch: {epoch:3d}  TrainLoss: {loss_train:>7f}"

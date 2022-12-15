@@ -95,6 +95,19 @@ def random_split(
     return torch.utils.data.random_split(data, counts)  # type: ignore
 
 
+def random_batch_split(
+    data: Sequence[Data], batch_size: int
+) -> Sequence[Sequence[Data]]:
+    # Determine even batch sizes:
+    n_data = len(data)
+    n_batches = qp.utils.ceildiv(n_data, batch_size)
+    i_batch = np.arange(n_batches, dtype=int)
+    batch_start = (i_batch * n_data) // n_batches
+    batch_stop = ((i_batch + 1) * n_data) // n_batches
+    counts = batch_stop - batch_start
+    return torch.utils.data.random_split(data, counts)  # type: ignore
+
+
 @functools.lru_cache()
 def get_grid1d(L: float, dz: float) -> hr.Grid1D:
     """Get/make a 1D grid of length `L` and spacing `dz` (cached by L, dz)."""
