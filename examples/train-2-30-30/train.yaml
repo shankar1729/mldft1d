@@ -1,17 +1,17 @@
 functional:
   T: 1.0
   n-weights: 2
-  w-hidden-sizes: [10, 10]
-  f-ex-hidden-sizes: [10, 10]
-  load-file: mlcdft_params.dat
+  w-hidden-sizes: [30, 30]
+  f-ex-hidden-sizes: [30, 30]
+  load-file: params.dat
 
 data:
-  filenames: ../data-T1-R0.5/*.h5
+  filenames: ../data/*.h5
   train-fraction: 0.8
 
 train:
   loss-curve: loss.dat
-  save-file: mlcdft_params.dat
+  save-file: params.dat
   save-interval: 30
   epochs: 3000
   batch-size: 10

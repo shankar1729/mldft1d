@@ -12,4 +12,4 @@ Vshape:
 lbda: 3.0
 
 functional:
-  load-file: train-T1-R0.5-small/mlcdft_params.dat
+  load-file: train-2-30-30/params.dat

@@ -133,6 +133,5 @@ dmypy.json
 # Data files
 *.h5
 *.log
-loss.dat
-mlcdft_params.dat
+*.dat
 Runs/
