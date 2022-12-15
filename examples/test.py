@@ -13,23 +13,20 @@ def run(
     n_bulk: float,
     Vshape: dict,
     lbda: float,
-    functional: dict,
+    functionals: dict,
 ):
     # Create grid and external potential:
     grid1d = hr.Grid1D(L=L, dz=dz)
     V = lbda * hr.v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
 
     # Create functionals:
-    cdfts = {
-        "Exact": hr.HardRodsFMT(grid1d, R=R, T=T, n_bulk=n_bulk),
-        "ML": hr.mlcdft.Minimizer(
-            functional=hr.mlcdft.Functional.load(
-                qp.rc.comm, **qp.utils.dict.key_cleanup(functional)
-            ),
+    cdfts = {"Exact": hr.HardRodsFMT(grid1d, R=R, T=T, n_bulk=n_bulk)}
+    for label, filename in functionals.items():
+        cdfts[f"ML {label}"] = hr.mlcdft.Minimizer(
+            functional=hr.mlcdft.Functional.load(qp.rc.comm, load_file=filename),
             grid1d=grid1d,
             n_bulk=n_bulk,
-        ),
-    }
+        )
 
     for cdft in cdfts.values():
         cdft.V = V
@@ -43,7 +40,7 @@ def run(
         plt.plot(z1d, hr.get1D(V.data) / lbda, label=f"$V/V_0$ (with $V_0 = {lbda}$)")
         for cdft_name, cdft in cdfts.items():
             DeltaE = float(cdft.E) - cdft.e_bulk * grid1d.L
-            qp.log.info(f"{cdft_name:>7s}:  mu: {cdft.mu:>7f} DeltaE: {DeltaE:>9f}")
+            qp.log.info(f"{cdft_name:>14s}:  mu: {cdft.mu:>7f} DeltaE: {DeltaE:>9f}")
             plt.plot(z1d, hr.get1D(cdft.n.data), label=f"$n$ ({cdft_name})")
         plt.axhline(n_bulk, color="k", ls="dotted")
         plt.xlabel("z")
