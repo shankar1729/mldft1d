@@ -2,6 +2,7 @@ from __future__ import annotations
 import sys
 import glob
 import torch
+import numpy as np
 import qimpy as qp
 import hardrods1d as hr
 from typing import Sequence, Iterable, Union
@@ -106,12 +107,13 @@ def get_optimizer(
 ) -> torch.optim.Optimizer:
     qp.log.info(f"\nCreating {method} optimizer with {method_kwargs}")
     Optimizer = getattr(torch.optim, method)  # select optimizer class
-    return Optimizer(params, **method_kwargs)
+    return Optimizer(params, **qp.utils.dict.key_cleanup(method_kwargs))
 
 
 def run_training_loop(
     trainer: Trainer,
     *,
+    loss_curve: str,
     save_file: str,
     save_interval: int,
     epochs: int,
@@ -122,15 +124,18 @@ def run_training_loop(
     optimizer = get_optimizer(trainer.functional.parameters(), method, **method_kwargs)
     qp.log.info(f"Training for {epochs} epochs")
     best_loss_test = trainer.test_loop()
+    loss_history = np.zeros((epochs, 2))
     qp.log.info(f"Initial TestLoss: {best_loss_test:>7f}  t[s]: {qp.rc.clock():.1f}")
     for epoch in range(1, epochs + 1):
         loss_train = trainer.train_loop(optimizer, batch_size)
         loss_test = trainer.test_loop()
+        loss_history[epoch - 1] = (loss_train, loss_test)
         qp.log.info(
             f"Epoch: {epoch:3d}  TrainLoss: {loss_train:>7f}"
             f"  TestLoss: {loss_test:>7f}  t[s]: {qp.rc.clock():.1f}"
         )
         if epoch % save_interval == 0:
+            np.savetxt(loss_curve, loss_history[:epoch], header="TrainLoss TestLoss")
             if loss_test < best_loss_test:
                 best_loss_test = loss_test
                 trainer.functional.save(save_file)
