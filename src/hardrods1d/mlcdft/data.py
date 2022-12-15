@@ -6,7 +6,7 @@ import qimpy as qp
 import numpy as np
 import hardrods1d as hr
 from h5py import File
-from typing import Sequence, List
+from typing import Sequence, TypeVar, List, Optional
 
 
 class Data:
@@ -79,7 +79,6 @@ def fuse_data(data_arr: Sequence[Data]) -> List[Data]:
         combined.n = qp.grid.FieldR(
             ref_grid1d.grid, data=torch.cat([data.n.data for data in same_grid], dim=0)
         )
-        qp.log.info(f"  {combined}")
         result.append(combined)
     return result
 
@@ -89,15 +88,19 @@ def main() -> None:
         print(Data(filename))
 
 
+T = TypeVar("T")
+
+
 def random_split(
-    data: Sequence[Data], counts: Sequence[int]
-) -> Sequence[Sequence[Data]]:
-    return torch.utils.data.random_split(data, counts)  # type: ignore
+    data: Sequence[T], counts: Sequence[int], seed: Optional[int] = None
+) -> Sequence[Sequence[T]]:
+    generator = None if (seed is None) else torch.Generator().manual_seed(seed)
+    return torch.utils.data.random_split(data, counts, generator)  # type: ignore
 
 
 def random_batch_split(
-    data: Sequence[Data], batch_size: int
-) -> Sequence[Sequence[Data]]:
+    data: Sequence[T], batch_size: int, seed: Optional[int] = None
+) -> Sequence[Sequence[T]]:
     # Determine even batch sizes:
     n_data = len(data)
     n_batches = qp.utils.ceildiv(n_data, batch_size)
@@ -105,7 +108,7 @@ def random_batch_split(
     batch_start = (i_batch * n_data) // n_batches
     batch_stop = ((i_batch + 1) * n_data) // n_batches
     counts = batch_stop - batch_start
-    return torch.utils.data.random_split(data, counts)  # type: ignore
+    return random_split(data, counts, seed)
 
 
 @functools.lru_cache()

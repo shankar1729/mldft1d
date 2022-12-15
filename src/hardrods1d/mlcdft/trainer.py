@@ -2,6 +2,7 @@ from __future__ import annotations
 import sys
 import glob
 import torch
+import itertools
 import numpy as np
 import qimpy as qp
 import hardrods1d as hr
@@ -23,28 +24,36 @@ class Trainer(torch.nn.Module):  # type: ignore
         super().__init__()
         self.functional = functional
 
-        # Load and check data consistency:
-        data = [hr.mlcdft.Data(filename) for filename in filenames]
-        T = functional.T
-        R = data[0].R
-        for data_i in data:
-            assert T == data_i.T
-            assert R == data_i.R
+        # Split filenames into train and test sets:
+        train_count = int(len(filenames) * train_fraction)
+        test_count = len(filenames) - train_count
+        filenames_train, filenames_test = hr.mlcdft.random_split(
+            filenames, [train_count, test_count], seed=0
+        )
 
-        # Split into train and test sets:
-        train_count = int(len(data) * train_fraction)
-        test_count = len(data) - train_count
-        data_train, data_test = hr.mlcdft.random_split(data, [train_count, test_count])
+        # Load training set:
+        self.data_train = [hr.mlcdft.Data(filename) for filename in filenames_train]
 
-        # Report training set:
-        qp.log.info("\nTraining set:")
-        for data_train_i in data_train:
-            qp.log.info(f"  {data_train_i}")
-        self.data_train = data_train
-
-        # Fuse and report test set:
+        # Load and fuse test set:
         qp.log.info("\nTest set:")
-        self.data_test = hr.mlcdft.fuse_data(data_test)
+        self.data_test = hr.mlcdft.fuse_data(
+            [hr.mlcdft.Data(filename) for filename in filenames_test]
+        )
+
+        # Report loaded data:
+        def report(name: str, data_set: Sequence[hr.mlcdft.Data]) -> None:
+            qp.log.info(f"\n{name} set:")
+            for data in data_set:
+                qp.log.info(f"  {data}")
+
+        report("Training", self.data_train)
+        report("Testing", self.data_test)
+
+        # Check data consistency:
+        T_all = [data.T for data in itertools.chain(self.data_train, self.data_test)]
+        R_all = [data.R for data in itertools.chain(self.data_train, self.data_test)]
+        assert min(T_all) == max(T_all) == functional.T
+        assert min(R_all) == max(R_all)
 
     def forward(self, data: hr.mlcdft.Data) -> torch.Tensor:
         """Compute loss function for one complete perturbation data-set"""
