@@ -24,7 +24,7 @@ def run(
         "Exact": hr.HardRodsFMT(grid1d, R=R, T=T, n_bulk=n_bulk),
         "ML": hr.mlcdft.Minimizer(
             functional=hr.mlcdft.Functional.load(
-                **qp.utils.dict.key_cleanup(functional)
+                qp.rc.comm, **qp.utils.dict.key_cleanup(functional)
             ),
             grid1d=grid1d,
             n_bulk=n_bulk,

@@ -6,30 +6,40 @@ import itertools
 import numpy as np
 import qimpy as qp
 import hardrods1d as hr
+from mpi4py import MPI
 from typing import Sequence, Iterable, Union
 
 
 class Trainer(torch.nn.Module):  # type: ignore
 
+    comm: MPI.Comm
     functional: hr.mlcdft.Functional
-    data_train: Sequence[hr.mlcdft.Data]  #: Training data
-    data_test: Sequence[hr.mlcdft.Data]  #: Testing data
+    n_train_tot: int  #: Total number of training data
+    n_test_tot: int  #: Total number of testing data
+    data_train: Sequence[hr.mlcdft.Data]  #: Training data (local to process)
+    data_test: Sequence[hr.mlcdft.Data]  #: Testing data (local to process)
 
     def __init__(
         self,
+        comm: MPI.Comm,
         functional: hr.mlcdft.Functional,
         filenames: Sequence[str],
         train_fraction: float,
     ) -> None:
         super().__init__()
+        self.comm = comm
         self.functional = functional
 
         # Split filenames into train and test sets:
-        train_count = int(len(filenames) * train_fraction)
-        test_count = len(filenames) - train_count
-        filenames_train, filenames_test = hr.mlcdft.random_split(
-            filenames, [train_count, test_count], seed=0
+        self.n_train_tot = int(len(filenames) * train_fraction)
+        self.n_test_tot = len(filenames) - self.n_train_tot
+        filenames_train_all, filenames_test_all = hr.mlcdft.random_split(
+            filenames, [self.n_train_tot, self.n_test_tot], seed=0
         )
+
+        # Split filenames within each set over MPI:
+        filenames_train = hr.mlcdft.random_mpi_split(filenames_train_all, comm)
+        filenames_test = hr.mlcdft.random_mpi_split(filenames_test_all, comm)
 
         # Load training set:
         self.data_train = [hr.mlcdft.Data(filename) for filename in filenames_train]
@@ -41,19 +51,26 @@ class Trainer(torch.nn.Module):  # type: ignore
         )
 
         # Report loaded data:
-        def report(name: str, data_set: Sequence[hr.mlcdft.Data]) -> None:
-            qp.log.info(f"\n{name} set:")
+        def report(name: str, data_set: Sequence[hr.mlcdft.Data], n_total: int) -> None:
+            qp.log.info(f"\n{name} set ({len(data_set)} local of {n_total}):")
             for data in data_set:
                 qp.log.info(f"  {data}")
 
-        report("Training", self.data_train)
-        report("Testing", self.data_test)
+        report("Training", self.data_train, self.n_train_tot)
+        report("Testing", self.data_test, self.n_test_tot)
 
         # Check data consistency:
-        T_all = [data.T for data in itertools.chain(self.data_train, self.data_test)]
-        R_all = [data.R for data in itertools.chain(self.data_train, self.data_test)]
-        assert min(T_all) == max(T_all) == functional.T
-        assert min(R_all) == max(R_all)
+        def get_min_max(attr_name: str) -> tuple[float, float]:
+            data_all = itertools.chain(self.data_train, self.data_test)
+            x = [getattr(data, attr_name) for data in data_all]
+            x_min = comm.allreduce(min(x), MPI.MIN)
+            x_max = comm.allreduce(max(x), MPI.MAX)
+            return x_min, x_max
+
+        Tmin, Tmax = get_min_max("T")
+        Rmin, Rmax = get_min_max("R")
+        assert Tmin == Tmax == functional.T
+        assert Rmin == Rmax
 
     def forward(self, data: hr.mlcdft.Data) -> torch.Tensor:
         """Compute loss function for one complete perturbation data-set"""
@@ -76,7 +93,9 @@ class Trainer(torch.nn.Module):  # type: ignore
         """Run training loop and return mean loss (over epoch)."""
         loss_total = 0.0
         n_perturbations = 0
-        for data_batch in hr.mlcdft.random_batch_split(self.data_train, batch_size):
+        n_batches = qp.utils.ceildiv(self.n_train_tot, batch_size)
+        for data_batch in hr.mlcdft.random_batch_split(self.data_train, n_batches):
+            qp.rc.comm.Barrier()
             # Step using total gradient over batch:
             optimizer.zero_grad()
             for data in data_batch:
@@ -84,17 +103,28 @@ class Trainer(torch.nn.Module):  # type: ignore
                 loss.backward()
                 loss_total += loss.item()
                 n_perturbations += data.n_perturbations
+            self.functional.allreduce_parameters_grad(self.comm)
             optimizer.step()
+            self.functional.bcast_parameters(self.comm)
+        # Collect total loss statistics:
+        if self.comm.size > 1:
+            loss_total = self.comm.allreduce(loss_total)
+            n_perturbations = self.comm.allreduce(n_perturbations)
         return loss_total / n_perturbations
 
     def test_loop(self) -> float:
         """Run test loop and return mean loss."""
         loss_total = sum(self(data).item() for data in self.data_test)
         n_perturbations = sum(data.n_perturbations for data in self.data_test)
+        # Collect total loss statistics:
+        if self.comm.size > 1:
+            loss_total = self.comm.allreduce(loss_total)
+            n_perturbations = self.comm.allreduce(n_perturbations)
         return loss_total / n_perturbations
 
 
 def load_data(
+    comm: MPI.Comm,
     functional: hr.mlcdft.Functional,
     *,
     filenames: Union[str, Sequence[str]],
@@ -108,7 +138,7 @@ def load_data(
     assert len(filenames_expanded)
 
     # Create trainer with specified functional and data split:
-    return Trainer(functional, filenames_expanded, train_fraction)
+    return Trainer(comm, functional, filenames_expanded, train_fraction)
 
 
 def get_optimizer(
@@ -147,7 +177,7 @@ def run_training_loop(
             np.savetxt(loss_curve, loss_history[:epoch], header="TrainLoss TestLoss")
             if loss_test < best_loss_test:
                 best_loss_test = loss_test
-                trainer.functional.save(save_file)
+                trainer.functional.save(save_file, trainer.comm)
                 qp.log.info(f"Saved parameters to '{save_file}'")
             else:
                 qp.log.info(f"Skipped save because TestLoss >= {best_loss_test} (best)")
@@ -155,6 +185,7 @@ def run_training_loop(
 
 
 def run(
+    comm: MPI.Comm,
     *,
     functional: dict,
     data: dict,
@@ -162,7 +193,8 @@ def run(
 ) -> None:
     torch.random.manual_seed(0)
     trainer = load_data(
-        hr.mlcdft.Functional.load(**qp.utils.dict.key_cleanup(functional)),
+        comm,
+        hr.mlcdft.Functional.load(comm, **qp.utils.dict.key_cleanup(functional)),
         **qp.utils.dict.key_cleanup(data),
     )
     run_training_loop(trainer, **qp.utils.dict.key_cleanup(train))
@@ -179,7 +211,7 @@ def main() -> None:
     qp.rc.init()
 
     input_dict = qp.utils.dict.key_cleanup(qp.utils.yaml.load(in_file))
-    run(**input_dict)
+    run(qp.rc.comm, **input_dict)
 
 
 if __name__ == "__main__":

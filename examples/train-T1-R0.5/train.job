@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -p gpu -n 1 --gres=gpu:1 -o train.log
+#SBATCH -p gpu -n 6 --gres=gpu:6 -o train.log
 
 export OMPI_MCA_opal_cuda_support=true
 export OMPI_OPTIONS="--mca btl ^openib --mca mtl psm2 --mca btl_smcuda_use_cuda_ipc 0"

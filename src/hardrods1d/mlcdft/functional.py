@@ -2,6 +2,7 @@ from __future__ import annotations
 import qimpy as qp
 import torch
 import os
+from mpi4py import MPI
 from typing import TypeVar
 from .nn_function import NNFunction
 
@@ -18,6 +19,7 @@ class Functional(torch.nn.Module):  # type: ignore
 
     def __init__(
         self,
+        comm: MPI.Comm,
         *,
         T: float,
         n_weights: int,
@@ -29,10 +31,13 @@ class Functional(torch.nn.Module):  # type: ignore
         self.T = T
         self.w = NNFunction(1, n_weights, w_hidden_sizes)
         self.f_ex = NNFunction(n_weights, n_weights, f_ex_hidden_sizes)
+        if comm.size > 1:
+            self.bcast_parameters(comm)
 
     @classmethod
     def load(
         cls,
+        comm: MPI.Comm,
         *,
         load_file: str = "",
         **kwargs,
@@ -56,12 +61,12 @@ class Functional(torch.nn.Module):  # type: ignore
                     params[key] = value
 
         # Create functional and load state if available:
-        functional = Functional(**params)
+        functional = Functional(comm, **params)
         if state:
             functional.load_state_dict(state)
         return functional
 
-    def save(self, filename: str) -> None:
+    def save(self, filename: str, comm: MPI.Comm) -> None:
         """Save parameters to specified filename."""
         params = dict(
             T=self.T,
@@ -70,7 +75,8 @@ class Functional(torch.nn.Module):  # type: ignore
             f_ex_hidden_sizes=self.f_ex.n_hidden,
             state=self.state_dict(),
         )
-        torch.save(params, filename)
+        if comm.rank == 0:
+            torch.save(params, filename)
 
     def get_w_tilde(self, grid: qp.grid.Grid, n_dim_tot: int) -> torch.Tensor:
         """Compute weights for specified grid and total dimension count."""
@@ -119,3 +125,15 @@ class Functional(torch.nn.Module):  # type: ignore
     def Gmag(grid: qp.grid.Grid):
         iG = grid.get_mesh("H").to(torch.double)  # half-space
         return (iG @ grid.lattice.Gbasis.T).norm(dim=-1)
+
+    def bcast_parameters(self, comm: MPI.Comm) -> None:
+        """Broadcast i.e. synchronize module parameters over `comm`."""
+        if comm.size > 1:
+            for parameter in self.parameters():
+                comm.Bcast(qp.utils.BufferView(parameter.data))
+
+    def allreduce_parameters_grad(self, comm: MPI.Comm) -> None:
+        """Sum module parameter gradients over `comm`."""
+        if comm.size > 1:
+            for i_param, parameter in enumerate(self.parameters()):
+                comm.Allreduce(MPI.IN_PLACE, qp.utils.BufferView(parameter.grad))

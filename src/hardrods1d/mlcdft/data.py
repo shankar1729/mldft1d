@@ -5,6 +5,7 @@ import functools
 import qimpy as qp
 import numpy as np
 import hardrods1d as hr
+from mpi4py import MPI
 from h5py import File
 from typing import Sequence, TypeVar, List, Optional
 
@@ -99,16 +100,21 @@ def random_split(
 
 
 def random_batch_split(
-    data: Sequence[T], batch_size: int, seed: Optional[int] = None
+    data: Sequence[T], n_batches: int, seed: Optional[int] = None
 ) -> Sequence[Sequence[T]]:
     # Determine even batch sizes:
     n_data = len(data)
-    n_batches = qp.utils.ceildiv(n_data, batch_size)
     i_batch = np.arange(n_batches, dtype=int)
     batch_start = (i_batch * n_data) // n_batches
     batch_stop = ((i_batch + 1) * n_data) // n_batches
     counts = batch_stop - batch_start
     return random_split(data, counts, seed)
+
+
+def random_mpi_split(data: Sequence[T], comm: MPI.Comm, seed: int = 0) -> Sequence[T]:
+    """Randomly split sequence over `comm` and return portion on this process.
+    Seed must be used to synchronize splits over the processes"""
+    return random_batch_split(data, comm.size, seed)[comm.rank]
 
 
 @functools.lru_cache()
