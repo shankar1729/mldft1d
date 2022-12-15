@@ -12,6 +12,7 @@ class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
     T: float  #: Temperature
     n_bulk: float  #: Bulk number density of the fluid
     mu: float  #: Bulk chemical potential
+    e_bulk: float  #: Bulk energy density
     logn: qp.grid.FieldR  #: State of the classical DFT (effectively local mu)
     V: qp.grid.FieldR  #: External potential
     w0_tilde: torch.Tensor
@@ -56,8 +57,13 @@ class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         self.n_bulk = n_bulk
         # Bulk free energy density, omega(n) = nT(log(n) - log(1-2Rn)) - mu n
         # Derivative domega/dn = T [log(n) - log(1-2Rn) + 1 + 2Rn/(1-2Rn)] - mu = 0
+        n0_bulk = 2 * n_bulk
         n1_bulk = (2 * self.R) * n_bulk
         self.mu = self.T * (np.log(n_bulk) - np.log(1 - n1_bulk) + 1 / (1 - n1_bulk))
+        self.e_bulk = (
+            self.T * (n_bulk * np.log(n_bulk) - 0.5 * n0_bulk * np.log(1.0 - n1_bulk))
+            - self.mu * n_bulk
+        )
 
     def step(self, direction: qp.grid.FieldR, step_size: float) -> None:
         self.logn += step_size * direction

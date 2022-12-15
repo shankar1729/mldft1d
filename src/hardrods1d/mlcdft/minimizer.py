@@ -13,6 +13,7 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
     V: qp.grid.FieldR  #: External potential
     n_bulk: float  #: Bulk number density of the fluid
     mu: float  #: Bulk chemical potential
+    e_bulk: float  #: Bulk energy density
     T: float  #: Temperature
 
     def __init__(
@@ -32,6 +33,7 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
         self.grid1d = grid1d
         self.n_bulk = n_bulk
         self.mu = functional.get_mu(n_bulk).item()
+        self.e_bulk = functional.get_energy_bulk(n_bulk, self.mu).item()
         self.T = functional.T
         self.logn = qp.grid.FieldR(
             grid1d.grid, data=torch.full_like(grid1d.z, np.log(self.n_bulk))

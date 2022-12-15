@@ -100,6 +100,12 @@ class Functional(torch.nn.Module):  # type: ignore
         energy["Fex"] = self.T * (n_bar ^ self.get_f_ex(n_bar)).sum(dim=0)  # Excess
         return energy
 
+    def get_energy_bulk(self, n_bulk: float, mu: float) -> torch.Tensor:
+        """Compute bulk energy density."""
+        n = torch.tensor(n_bulk, device=qp.rc.device)
+        n_bar = n.repeat(self.w.n_out)
+        return self.T * (n * n.log() + n_bar @ self.get_f_ex(n_bar)) - mu * n
+
     def get_mu(self, n_bulk: float, create_graph: bool = False) -> torch.Tensor:
         """Compute chemical potential that will produce target density `n_bulk`."""
         # Bulk condition: (d/dn) [f_id(n) + f_ex(w * n)] = mu
