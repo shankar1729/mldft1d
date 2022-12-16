@@ -14,3 +14,5 @@ lbda: 3.0
 functionals:
   2-10-10: train-2-10-10/params.dat
   2-30-30: train-2-30-30/params.dat
+  2-90-90: train-2-90-90/params.dat
+  2-30-30-30: train-2-30-30-30/params.dat
