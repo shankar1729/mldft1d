@@ -1,4 +1,5 @@
 from __future__ import annotations
+import numpy as np
 import qimpy as qp
 import torch
 import os
@@ -77,6 +78,7 @@ class Functional(torch.nn.Module):  # type: ignore
             n_weights=self.w.n_out,
             w_hidden_sizes=self.w.n_hidden,
             f_ex_hidden_sizes=self.f_ex.n_hidden,
+            rc=self.rc,
             state=self.state_dict(),
         )
         if comm.rank == 0:
@@ -163,8 +165,36 @@ class WeightCalculatorG:
 class WeightCalculatorR:
     """Real-space weight calculator."""
 
+    sup: int  #: supercell multiplier to accommodate range of kernel
+    dz: float  #: grid spacing
+    z_sup_sq: torch.Tensor  #: z^2 in supercell (input to NN weight function)
+    prefactor: torch.Tensor  #: weight function prefactor enforcing smooth falloff at rc
+
     def __init__(self, grid: qp.grid.Grid, rc: float) -> None:
-        pass
+        # Extract 1D grid properties:
+        L = grid.lattice.Rbasis[2, 2].item()
+        Nz = grid.shape[2]
+        dz = L / Nz
+        # Find supercell needed to accommodate rc:
+        sup = int(np.ceil(2 * rc / L))
+        Nz_sup = Nz * sup
+        iz_sup = torch.arange(Nz_sup, device=qp.rc.device)[None]  # extra dim for bcast
+        z_sup = dz * torch.where(iz_sup <= Nz_sup // 2, iz_sup, iz_sup - Nz_sup)
+        # Store required quantities:
+        self.sup = sup
+        self.dz = dz
+        self.z_sup_sq = z_sup.square()
+        self.prefactor = torch.where(
+            abs(z_sup) < rc, 1.0 + torch.cos(z_sup * np.pi / rc), 0.0
+        )  # value and derivative are both zero at rc
 
     def __call__(self, w: NNFunction, n_dim_tot: int) -> torch.Tensor:
-        pass
+        # Compute in real space (enforce positive, bounded and cutoff):
+        w_real = self.prefactor / (1.0 + w(self.z_sup_sq).square())
+        # Convert to half reciprocal space and downselect to orginal cell:
+        w_tilde = (torch.fft.rfft(w_real).real * self.dz)[:, :: self.sup]
+        w_zero = w_tilde[..., :1]  # G = 0 component of w_tilde (with same dimensions)
+        # Enforce G = 0 constraint and broadcast:
+        Nw, Nz = w_tilde.shape
+        bcast_shape = (Nw,) + (1,) * (n_dim_tot - 2) + (Nz,)
+        return (w_tilde / w_zero).view(bcast_shape)
