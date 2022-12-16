@@ -1,3 +1,4 @@
+import os
 import sys
 import qimpy as qp
 import hardrods1d as hr
@@ -14,6 +15,7 @@ def run(
     Vshape: dict,
     lbda: float,
     functionals: dict,
+    run_name: str,
 ):
     # Create grid and external potential:
     grid1d = hr.Grid1D(L=L, dz=dz)
@@ -46,7 +48,7 @@ def run(
         plt.xlabel("z")
         plt.ylim(0, None)
         plt.legend()
-        plt.savefig("test.pdf", bbox_inches="tight")
+        plt.savefig(f"{run_name}.pdf", bbox_inches="tight")
         plt.show()
 
 
@@ -55,13 +57,14 @@ def main() -> None:
         print("Usage: python test.py <input.yaml>")
         exit(1)
     in_file = sys.argv[1]
+    run_name = os.path.splitext(in_file)[0]
 
     qp.utils.log_config()  # default set up to log from MPI head alone
     qp.log.info("Using QimPy " + qp.__version__)
     qp.rc.init()
 
     input_dict = qp.utils.dict.key_cleanup(qp.utils.yaml.load(in_file))
-    run(**input_dict)
+    run(**input_dict, run_name=run_name)
 
 
 if __name__ == "__main__":
