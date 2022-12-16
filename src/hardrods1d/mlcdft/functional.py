@@ -2,8 +2,9 @@ from __future__ import annotations
 import qimpy as qp
 import torch
 import os
+import functools
 from mpi4py import MPI
-from typing import TypeVar
+from typing import TypeVar, Protocol
 from .nn_function import NNFunction
 
 
@@ -16,6 +17,7 @@ class Functional(torch.nn.Module):  # type: ignore
     T: float  #: Temperature
     w: NNFunction  #: Weight functions defining spatial nonlocality
     f_ex: NNFunction  #: Free energy density as a function of weighted densities
+    rc: float  #: If nonzero, compute weight function in real space with this cutoff
 
     def __init__(
         self,
@@ -25,12 +27,14 @@ class Functional(torch.nn.Module):  # type: ignore
         n_weights: int,
         w_hidden_sizes: list[int],
         f_ex_hidden_sizes: list[int],
+        rc: float = 0.0,
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
         self.T = T
         self.w = NNFunction(1, n_weights, w_hidden_sizes)
         self.f_ex = NNFunction(n_weights, n_weights, f_ex_hidden_sizes)
+        self.rc = rc
         if comm.size > 1:
             self.bcast_parameters(comm)
 
@@ -80,14 +84,7 @@ class Functional(torch.nn.Module):  # type: ignore
 
     def get_w_tilde(self, grid: qp.grid.Grid, n_dim_tot: int) -> torch.Tensor:
         """Compute weights for specified grid and total dimension count."""
-        # Compute G = 0 correction:
-        Gzero = torch.zeros((1,) * n_dim_tot, device=qp.rc.device)
-        w_zero = self.w(Gzero)
-        w_zero -= 1.0
-        # Compute G-dependent result:
-        Gmag_shape = (1,) * (n_dim_tot - 3) + grid.shapeH
-        Gmag = Functional.Gmag(grid).view(Gmag_shape)
-        return self.w(Gmag) - w_zero
+        return get_weight_calculator(grid, self.rc)(self.w, n_dim_tot)
 
     def get_f_ex(self, n: NNInput) -> NNInput:
         if isinstance(n, torch.Tensor):
@@ -121,11 +118,6 @@ class Functional(torch.nn.Module):  # type: ignore
         energy_density = self.T * (n * n.log() + n_bar @ self.get_f_ex(n_bar))
         return torch.autograd.grad(energy_density, n, create_graph=create_graph)[0]
 
-    @staticmethod
-    def Gmag(grid: qp.grid.Grid):
-        iG = grid.get_mesh("H").to(torch.double)  # half-space
-        return (iG @ grid.lattice.Gbasis.T).norm(dim=-1)
-
     def bcast_parameters(self, comm: MPI.Comm) -> None:
         """Broadcast i.e. synchronize module parameters over `comm`."""
         if comm.size > 1:
@@ -137,3 +129,42 @@ class Functional(torch.nn.Module):  # type: ignore
         if comm.size > 1:
             for i_param, parameter in enumerate(self.parameters()):
                 comm.Allreduce(MPI.IN_PLACE, qp.utils.BufferView(parameter.grad))
+
+
+class WeightCalculator(Protocol):
+    def __call__(self, w: NNFunction, n_dim_tot: int) -> torch.Tensor:
+        ...
+
+
+@functools.lru_cache()
+def get_weight_calculator(grid: qp.grid.Grid, rc: float) -> WeightCalculator:
+    if rc:
+        return WeightCalculatorR(grid, rc)
+    else:
+        return WeightCalculatorG(grid)
+
+
+class WeightCalculatorG:
+    """Reciprocal-space weight calculator."""
+
+    Gmag: torch.Tensor  #: reciprocal lattice vector magnitudes
+
+    def __init__(self, grid: qp.grid.Grid) -> None:
+        iG = grid.get_mesh("H").to(torch.double)  # half-space
+        self.Gmag = (iG @ grid.lattice.Gbasis.T).norm(dim=-1)
+
+    def __call__(self, w: NNFunction, n_dim_tot: int) -> torch.Tensor:
+        bcast_shape = (1,) * (n_dim_tot - 3) + self.Gmag.shape
+        w_tilde = w(self.Gmag.view(bcast_shape))
+        w_zero = w_tilde[..., :1]  # G = 0 component of w_tilde (with same dimensions)
+        return w_tilde - (w_zero - 1.0)  # Return weight with w(0) constrained to 1
+
+
+class WeightCalculatorR:
+    """Real-space weight calculator."""
+
+    def __init__(self, grid: qp.grid.Grid, rc: float) -> None:
+        pass
+
+    def __call__(self, w: NNFunction, n_dim_tot: int) -> torch.Tensor:
+        pass
