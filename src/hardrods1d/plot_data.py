@@ -34,24 +34,25 @@ def plot_data(data_file: str) -> None:
     sm.set_array([])
     plt.colorbar(sm, label=r"Perturbation strength, $\lambda$")
 
-    # Compare exact and thermodynamically-integrated energies:
-    plt.figure(2)
-    # --- exact energies
-    E -= np.interp(0.0, lbda, E)  # difference from bulk
-    plt.plot(lbda, E, label="CDFT")
-    # --- thermodynamic integration
-    dz = z[1] - z[0]
-    integrand = (n @ V) * dz
-    dlbda = lbda[1] - lbda[0]
-    E_TI = hr.trapz(integrand, dlbda)
-    E_TI -= np.interp(0.0, lbda, E_TI)  # difference from bulk
-    plt.plot(lbda, E_TI, "r+", label="TI")
-    plt.axhline(0, color="k", lw=1, ls="dotted")
-    plt.axvline(0, color="k", lw=1, ls="dotted")
-    plt.legend()
-    plt.xlim(lbda.min(), lbda.max())
-    plt.xlabel(r"Perturbation strength, $V_0$")
-    plt.ylabel(r"Free energy change, $\Delta\Phi$")
+    if len(lbda) > 1:
+        # Compare exact and thermodynamically-integrated energies:
+        plt.figure(2)
+        # --- exact energies
+        E -= np.interp(0.0, lbda, E)  # difference from bulk
+        plt.plot(lbda, E, label="CDFT")
+        # --- thermodynamic integration
+        dz = z[1] - z[0]
+        integrand = (n @ V) * dz
+        dlbda = lbda[1] - lbda[0]
+        E_TI = hr.trapz(integrand, dlbda)
+        E_TI -= np.interp(0.0, lbda, E_TI)  # difference from bulk
+        plt.plot(lbda, E_TI, "r+", label="TI")
+        plt.axhline(0, color="k", lw=1, ls="dotted")
+        plt.axvline(0, color="k", lw=1, ls="dotted")
+        plt.legend()
+        plt.xlim(lbda.min(), lbda.max())
+        plt.xlabel(r"Perturbation strength, $V_0$")
+        plt.ylabel(r"Free energy change, $\Delta\Phi$")
 
     plt.show()
 

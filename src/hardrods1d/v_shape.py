@@ -28,8 +28,26 @@ def _get_rectangular(
     return (rect_tilde * gauss_tilde).to(torch.complex128)
 
 
+def _get_random(grid1d: Grid1D, *, sigma: float, seed: int) -> torch.Tensor:
+    # Determine zero and Nyquist frequency weights / real constraints:
+    iGz = grid1d.iGz
+    Nz = grid1d.grid.shape[2]
+    is_real = torch.logical_or(iGz == 0, 2 * iGz == Nz)
+    Gweight = torch.where(is_real, 1.0, 2.0)
+    # Create white noise with above constraints:
+    Gmag = grid1d.Gmag
+    torch.manual_seed(seed)
+    Gnoise = torch.randn_like(Gmag, dtype=torch.complex128)
+    Gnoise[is_real] = Gnoise[is_real].real.to(torch.complex128)
+    # Filter and normalize:
+    Gnoise *= np.exp(-0.5 * (Gmag * sigma).square())
+    Gnoise *= np.sqrt(1.0 / (qp.utils.abs_squared(Gnoise) * Gweight).sum())
+    return Gnoise
+
+
 _get_map: Dict[str, Any] = {
     "gauss": _get_gauss,
     "cosine": _get_cosine,
     "rectangular": _get_rectangular,
+    "random": _get_random,
 }
