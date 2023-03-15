@@ -46,46 +46,48 @@ class Schrodinger:
         for i, k in enumerate(k_points):
             Ek, rho_k = self.solve_k(k)
             E += wk * Ek
-            self.n.data += wk * torch.from_numpy(rho_k[None, None, :])
+            self.n.data += wk * rho_k[None, None, :]
         return E
 
     def solve_k(self, k) -> tuple[float, np.ndarray]:
         """Solve for one k-point, returning energy and density contributions."""
         L = self.grid1d.L
         dz = self.grid1d.dz
-        Nx = int(np.round(L / dz))
+        Nz = self.grid1d.z.shape[2]
 
         # Full KE operator:
-        iG = np.concatenate((np.arange(Nx // 2), np.arange(Nx // 2 - Nx, 0)))
+        iG = self.grid1d.grid.get_mesh("G")[..., 2].flatten()
         k_plus_G = (iG + k) * (2 * np.pi / L)
         KE_diag = 0.5 * (k_plus_G**2)
 
         # Reduced KE for plane-wave basis:
-        Gmax_rho = (np.pi / L) * Nx  # Nyquist frequency for charge density grid
+        Gmax_rho = (np.pi / L) * Nz  # Nyquist frequency for charge density grid
         Gmax_wfn = 0.5 * Gmax_rho
         KEcut_wfn = 0.5 * (Gmax_wfn**2)
-        sel = np.where(KE_diag <= KEcut_wfn)[0]
+        sel = torch.where(KE_diag <= KEcut_wfn)[0]
         iG = iG[sel]
-        KE = np.diag(KE_diag[sel])
+        KE = torch.diag(KE_diag[sel])
         n_bands = len(sel)
 
         # Potential operator in PW basis
-        V = np.array(np.squeeze(self.V.data))
-        Vtilde = np.fft.ifft(V)
-        ij_grid = (iG[:, None] - iG[None, :]) % Nx
+        V = self.V.data.flatten()
+        Vtilde = torch.fft.ifft(V)
+        ij_grid = (iG[:, None] - iG[None, :]) % Nz
         Vop = Vtilde[ij_grid]
         H = KE + Vop
 
         # Diagonalize the Hamiltonian to find the eigenvalues and eigenvectors
-        eig, psi_reduced = np.linalg.eigh(H)
+        eig, psi_reduced = torch.linalg.eigh(H)
         f = expit((self.mu - eig) / self.T)  # Fermi-Dirac occupation factors
         E = eig @ f  # Total energy
 
         # Expand wavefunctions for density compute:
-        psi_tilde = np.zeros((n_bands, Nx), dtype=np.complex128)
+        psi_tilde = torch.zeros(
+            (n_bands, Nz), dtype=psi_reduced.dtype, device=qp.rc.device
+        )
         psi_tilde[:, iG] = psi_reduced.T
 
-        psi_sqr = abs(np.fft.fft(psi_tilde)) ** 2
+        psi_sqr = qp.utils.abs_squared(torch.fft.fft(psi_tilde))
         rho = (f @ psi_sqr) * dz
         return E, rho
 
