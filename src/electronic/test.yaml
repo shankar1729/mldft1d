@@ -8,7 +8,7 @@ Vshape:
   sigma: 0.1
   duty: 0.4
 
-lbda: 1.0
+lbda: 0.5
 
 functionals: {}
 #  electronic: params.dat

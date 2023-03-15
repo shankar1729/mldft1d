@@ -2,7 +2,6 @@ import qimpy as qp
 import numpy as np
 import hardrods1d as hr
 import torch
-from scipy.special import expit
 
 
 class Schrodinger:
@@ -78,7 +77,7 @@ class Schrodinger:
 
         # Diagonalize the Hamiltonian to find the eigenvalues and eigenvectors
         eig, psi_reduced = torch.linalg.eigh(H)
-        f = expit((self.mu - eig) / self.T)  # Fermi-Dirac occupation factors
+        f = torch.special.expit((self.mu - eig) / self.T)  # Fermi-Dirac occupations
         E = eig @ f  # Total energy
 
         # Expand wavefunctions for density compute:
