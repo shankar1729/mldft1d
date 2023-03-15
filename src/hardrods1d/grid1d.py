@@ -20,8 +20,7 @@ class Grid1D:
         """
         self.L = L
         self.lattice = qp.lattice.Lattice(system="orthorhombic", a=1.0, b=1.0, c=L)
-        process_grid = qp.utils.ProcessGrid(qp.rc.comm, "rkb", (1, -1, 1))
-        ions = qp.ions.Ions(lattice=self.lattice, process_grid=process_grid)
+        ions = qp.ions.Ions(lattice=self.lattice)
         symmetries = qp.symmetries.Symmetries(
             lattice=self.lattice,
             ions=ions,
