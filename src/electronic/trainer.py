@@ -69,8 +69,7 @@ class Trainer(torch.nn.Module):  # type: ignore
             return x_min, x_max
 
         Tmin, Tmax = get_min_max("T")
-        Rmin, Rmax = get_min_max("R")
-        assert Rmin == Rmax
+        assert Tmin == Tmax
 
     def forward(self, data: hr.mlcdft.Data) -> torch.Tensor:
         """Compute loss function for one complete perturbation data-set"""

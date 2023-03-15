@@ -10,5 +10,5 @@ Vshape:
   
 lbda: 3.0
 
-functionals: {}
-#  electronic: params.dat
+functionals:
+  electronic: params.dat
