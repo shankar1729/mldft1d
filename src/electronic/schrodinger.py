@@ -39,58 +39,57 @@ class Schrodinger:
 
     def minimize(self):
         L = self.grid1d.L
-        dz = self.grid1d.dz
-        Nx = int(np.round(L / dz))
-
-        def schrodinger_1d(k, n_bulk, T):
-            # Full KE operator:
-            iG = np.concatenate((np.arange(Nx // 2), np.arange(Nx // 2 - Nx, 0)))
-            k_plus_G = (iG + k) * (2 * np.pi / L)
-            KE_diag = 0.5 * (k_plus_G**2)
-
-            # Reduced KE for plane-wave basis:
-            Gmax_rho = (np.pi / L) * Nx  # Nyquist frequency for charge density grid
-            Gmax_wfn = 0.5 * Gmax_rho
-            KEcut_wfn = 0.5 * (Gmax_wfn**2)
-            sel = np.where(KE_diag <= KEcut_wfn)[0]
-            iG = iG[sel]
-            KE = np.diag(KE_diag[sel])
-            n_bands = len(sel)
-
-            # Potential operator in PW basis
-            V = np.array(np.squeeze(self.V.data))
-            Vtilde = np.fft.ifft(V)
-            ij_grid = (iG[:, None] - iG[None, :]) % Nx
-            Vop = Vtilde[ij_grid]
-            H = KE + Vop
-
-            # Diagonalize the Hamiltonian to find the eigenvalues and eigenvectors
-            eigvals, eigvecs = np.linalg.eigh(H)
-
-            # Expand wavefunctions for density compute:
-            psi_tilde = np.zeros((n_bands, Nx), dtype=np.complex128)
-            psi_tilde[:, iG] = eigvecs.T
-
-            # FD smearing
-            def fd(E, n_bulk, T):
-                return expit((self.mu - E) / T)
-
-            psi_sqr = abs(np.fft.fft(psi_tilde)) ** 2
-            smearing_weights = fd(eigvals, n_bulk, T)
-            rho = smearing_weights @ psi_sqr
-            return np.average(eigvals, weights=smearing_weights), eigvecs, rho
-
         N_k_points = 100
         k_points = np.linspace(-np.pi / L, np.pi / L, N_k_points)
         k_dens = []
         k_energy = []
         for i, k in enumerate(k_points):
-            energy, eigvecs, rho = schrodinger_1d(k, self.n_bulk, self.T)
+            energy, rho = self.solve_k(k)
             k_dens.append(rho)
             k_energy.append(energy)
         rho = np.array(k_dens).mean(axis=0) * 2
         self.n.data = torch.from_numpy(rho[None, None, :])
         return np.mean(k_energy)
+
+    def solve_k(self, k) -> tuple[float, np.ndarray]:
+        """Solve for one k-point, returning energy and density contributions."""
+        L = self.grid1d.L
+        dz = self.grid1d.dz
+        Nx = int(np.round(L / dz))
+
+        # Full KE operator:
+        iG = np.concatenate((np.arange(Nx // 2), np.arange(Nx // 2 - Nx, 0)))
+        k_plus_G = (iG + k) * (2 * np.pi / L)
+        KE_diag = 0.5 * (k_plus_G**2)
+
+        # Reduced KE for plane-wave basis:
+        Gmax_rho = (np.pi / L) * Nx  # Nyquist frequency for charge density grid
+        Gmax_wfn = 0.5 * Gmax_rho
+        KEcut_wfn = 0.5 * (Gmax_wfn**2)
+        sel = np.where(KE_diag <= KEcut_wfn)[0]
+        iG = iG[sel]
+        KE = np.diag(KE_diag[sel])
+        n_bands = len(sel)
+
+        # Potential operator in PW basis
+        V = np.array(np.squeeze(self.V.data))
+        Vtilde = np.fft.ifft(V)
+        ij_grid = (iG[:, None] - iG[None, :]) % Nx
+        Vop = Vtilde[ij_grid]
+        H = KE + Vop
+
+        # Diagonalize the Hamiltonian to find the eigenvalues and eigenvectors
+        eig, psi_reduced = np.linalg.eigh(H)
+        f = expit((self.mu - eig) / self.T)  # Fermi-Dirac occupation factors
+        E = eig @ f  # Total energy
+
+        # Expand wavefunctions for density compute:
+        psi_tilde = np.zeros((n_bands, Nx), dtype=np.complex128)
+        psi_tilde[:, iG] = psi_reduced.T
+
+        psi_sqr = abs(np.fft.fft(psi_tilde)) ** 2
+        rho = f @ psi_sqr
+        return E, rho
 
     def compute(self, state, energy_only: bool) -> None:  # type: ignore
         ...
