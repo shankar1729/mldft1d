@@ -38,18 +38,16 @@ class Schrodinger:
         ...
 
     def minimize(self):
-        L = self.grid1d.L
         N_k_points = 100
-        k_points = np.linspace(-np.pi / L, np.pi / L, N_k_points)
-        k_dens = []
-        k_energy = []
+        k_points = np.arange(N_k_points) * (1.0 / N_k_points)  # in fractional coords
+        wk = 2.0 / N_k_points  # weight of each k-point (including spin degeneracy)
+        E = 0.0
+        self.n.data.zero_()
         for i, k in enumerate(k_points):
-            energy, rho = self.solve_k(k)
-            k_dens.append(rho)
-            k_energy.append(energy)
-        rho = np.array(k_dens).mean(axis=0) * 2
-        self.n.data = torch.from_numpy(rho[None, None, :])
-        return np.mean(k_energy)
+            Ek, rho_k = self.solve_k(k)
+            E += wk * Ek
+            self.n.data += wk * torch.from_numpy(rho_k[None, None, :])
+        return E
 
     def solve_k(self, k) -> tuple[float, np.ndarray]:
         """Solve for one k-point, returning energy and density contributions."""
@@ -88,7 +86,7 @@ class Schrodinger:
         psi_tilde[:, iG] = psi_reduced.T
 
         psi_sqr = abs(np.fft.fft(psi_tilde)) ** 2
-        rho = f @ psi_sqr
+        rho = (f @ psi_sqr) * dz
         return E, rho
 
     def compute(self, state, energy_only: bool) -> None:  # type: ignore
