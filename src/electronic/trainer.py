@@ -202,7 +202,7 @@ def run(
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python -m hardrods1d.mlcdft.trainer <input.yaml>")
+        print("Usage: python trainer.py <input.yaml>")
         exit(1)
     in_file = sys.argv[1]
 

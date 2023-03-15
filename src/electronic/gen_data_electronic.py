@@ -3,6 +3,7 @@ import numpy as np
 import hardrods1d as hr
 import h5py
 import sys
+from schrodinger import Schrodinger
 
 
 def run(
@@ -18,7 +19,7 @@ def run(
 ) -> None:
 
     grid1d = hr.Grid1D(L=L, dz=dz)
-    cdft = hr.SchrodingerFMT(grid1d, n_bulk=n_bulk)
+    cdft = Schrodinger(grid1d, n_bulk=n_bulk)
     n0 = cdft.n
 
     qp.log.info(f"mu = {cdft.mu}")

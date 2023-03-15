@@ -1,6 +1,5 @@
 L: 20.0
 dz: 0.05
-T: 1.0
 n_bulk: 0.6
 
 Vshape:
@@ -10,5 +9,5 @@ Vshape:
 
 lbda: 3.0
 
-functionals:
-  electronic: params.dat
+functionals: {}
+#  electronic: params.dat

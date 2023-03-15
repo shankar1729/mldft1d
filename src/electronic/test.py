@@ -4,6 +4,7 @@ import qimpy as qp
 import hardrods1d as hr
 import matplotlib.pyplot as plt
 from functional import SchrodingerFunctional
+from schrodinger import Schrodinger
 
 
 def run(
@@ -21,7 +22,7 @@ def run(
     V = lbda * hr.v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
 
     # Create functionals:
-    cdfts = {"Exact": hr.SchrodingerFMT(grid1d, n_bulk=n_bulk)}
+    cdfts = {"Exact": Schrodinger(grid1d, n_bulk=n_bulk)}
     for label, filename in functionals.items():
         cdfts[f"ML {label}"] = hr.mlcdft.Minimizer(
             functional=SchrodingerFunctional.load(qp.rc.comm, load_file=filename),
@@ -45,7 +46,7 @@ def run(
             plt.plot(z1d, hr.get1D(cdft.n.data), label=f"$n$ ({cdft_name})")
         plt.axhline(n_bulk, color="k", ls="dotted")
         plt.xlabel("z")
-        #plt.ylim((min(V.data), None))
+        # plt.ylim((min(V.data), None))
         plt.legend()
         plt.savefig(f"{run_name}.pdf", bbox_inches="tight")
         plt.show()
