@@ -37,15 +37,15 @@ class Schrodinger:
         ...
 
     def minimize(self):
-        N_k_points = 100
-        k_points = np.arange(N_k_points) * (1.0 / N_k_points)  # in fractional coords
-        wk = 2.0 / N_k_points  # weight of each k-point (including spin degeneracy)
+        Nk = 100
+        k = np.arange(Nk // 2 + 1) * (1.0 / Nk)  # in fractional coords, symm reduced
+        wk = np.where(k, 2, 1) * (2.0 / Nk)  # weight of each k-point
         E = 0.0
         self.n.data.zero_()
-        for i, k in enumerate(k_points):
-            Ek, rho_k = self.solve_k(k)
-            E += wk * Ek
-            self.n.data += wk * rho_k[None, None, :]
+        for ki, wki in zip(k, wk):
+            Ek, rho_k = self.solve_k(ki)
+            E += wki * Ek
+            self.n.data += wki * rho_k[None, None, :]
         return E
 
     def solve_k(self, k) -> tuple[float, np.ndarray]:
