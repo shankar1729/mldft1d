@@ -10,7 +10,6 @@ def run(
     *,
     L: float,
     dz: float,
-    R: float,  #: Radius / half-length `R`
     T: float,  #: Temperature
     n_bulk: float,  #: Bulk number density of the fluid
     Vshape: dict,  #: Potential shape and parameters
@@ -19,7 +18,7 @@ def run(
 ) -> None:
 
     grid1d = hr.Grid1D(L=L, dz=dz)
-    cdft = Schrodinger(grid1d, n_bulk=n_bulk)
+    cdft = Schrodinger(grid1d, n_bulk=n_bulk, T=T)
     n0 = cdft.n
 
     qp.log.info(f"mu = {cdft.mu}")
@@ -48,7 +47,7 @@ def run(
     f["E"] = E
     f.attrs["n_bulk"] = n_bulk
     f.attrs["T"] = T
-    f.attrs["R"] = R
+    f.attrs["R"] = np.nan  # N/A for electronic, but required by hr.mlcdft.Data
     f.close()
 
 

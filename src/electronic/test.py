@@ -12,6 +12,7 @@ def run(
     L: float,
     dz: float,
     n_bulk: float,
+    T: float,
     Vshape: dict,
     lbda: float,
     functionals: dict,
@@ -22,7 +23,7 @@ def run(
     V = lbda * hr.v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
 
     # Create functionals:
-    cdfts = {"Exact": Schrodinger(grid1d, n_bulk=n_bulk)}
+    cdfts = {"Exact": Schrodinger(grid1d, n_bulk=n_bulk, T=T)}
     for label, filename in functionals.items():
         cdfts[f"ML {label}"] = hr.mlcdft.Minimizer(
             functional=SchrodingerFunctional.load(qp.rc.comm, load_file=filename),

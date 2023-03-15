@@ -1,7 +1,6 @@
 L: ${L}
 dz: 0.05
-R: 0.5
-T: 1.0
+T: 0.01  # Fermi smearing width
 n_bulk: ${n_bulk}
 
 Vshape:

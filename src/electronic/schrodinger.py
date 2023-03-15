@@ -9,17 +9,17 @@ class Schrodinger:
     """Exact 1D Schrodinger solver"""
 
     grid1d: hr.Grid1D
-    T: float  #: Temperature
+    T: float  #: Fermi smearing width
     n_bulk: float  #: Bulk number density of the fluid
     mu: float  #: Bulk chemical potential
     e_bulk: float  #: Bulk energy density
     logn: qp.grid.FieldR  #: State of the classical DFT (effectively local mu)
     V: qp.grid.FieldR  #: External potential
 
-    def __init__(self, grid1d: hr.Grid1D, *, n_bulk: float) -> None:
+    def __init__(self, grid1d: hr.Grid1D, *, n_bulk: float, T: float) -> None:
         """Initializes to bulk fluid with no external potential."""
         self.grid1d = grid1d
-        self.T = 1.0  # Needs to be changed
+        self.T = T
         self.set_n_bulk(n_bulk)
         self.n = qp.grid.FieldR(grid1d.grid, data=torch.zeros_like(grid1d.z))
         self.V = self.n.zeros_like()
