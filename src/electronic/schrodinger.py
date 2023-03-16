@@ -26,8 +26,7 @@ class Schrodinger:
     def set_n_bulk(self, n_bulk: float) -> None:
         """Update the chemical potential to target given bulk density."""
         self.n_bulk = n_bulk
-        # Bulk free energy density, omega(n) = nT(log(n) - log(1-2Rn)) - mu n
-        # Derivative domega/dn = T [log(n) - log(1-2Rn) + 1 + 2Rn/(1-2Rn)] - mu = 0
+        self.e_bulk = (np.pi**2) * (n_bulk**3) / 24
         self.mu = (np.pi * n_bulk) ** 2 / 8
 
     def step(self, direction: qp.grid.FieldR, step_size: float) -> None:
@@ -37,7 +36,7 @@ class Schrodinger:
         ...
 
     def minimize(self):
-        Nk = 100
+        Nk = 2 * np.ceil(2 * np.pi / (self.grid1d.L * self.T))  # assuming vF ~ 1
         k = np.arange(Nk // 2 + 1) * (1.0 / Nk)  # in fractional coords, symm reduced
         wk = np.where(k, 2, 1) * (2.0 / Nk)  # weight of each k-point
         E = 0.0
@@ -51,7 +50,6 @@ class Schrodinger:
     def solve_k(self, k) -> tuple[float, np.ndarray]:
         """Solve for one k-point, returning energy and density contributions."""
         L = self.grid1d.L
-        dz = self.grid1d.dz
         Nz = self.grid1d.z.shape[2]
 
         # Full KE operator:
@@ -87,7 +85,7 @@ class Schrodinger:
         psi_tilde[:, iG] = psi_reduced.T
 
         psi_sqr = qp.utils.abs_squared(torch.fft.fft(psi_tilde))
-        rho = (f @ psi_sqr) * dz
+        rho = (f @ psi_sqr) / L
         return E, rho
 
     def compute(self, state, energy_only: bool) -> None:  # type: ignore
