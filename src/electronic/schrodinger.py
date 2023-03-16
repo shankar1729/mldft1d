@@ -76,7 +76,9 @@ class Schrodinger:
         # Diagonalize the Hamiltonian to find the eigenvalues and eigenvectors
         eig, psi_reduced = torch.linalg.eigh(H)
         f = torch.special.expit((self.mu - eig) / self.T)  # Fermi-Dirac occupations
-        E = eig @ f  # Total energy
+        fbar = 1.0 - f
+        S = -torch.special.xlogy(f, f) - torch.special.xlogy(fbar, fbar)  # Entropy
+        G = eig @ f - self.T * S.sum() - self.mu * f.sum()  # Grand free energy
 
         # Expand wavefunctions for density compute:
         psi_tilde = torch.zeros(
@@ -86,7 +88,7 @@ class Schrodinger:
 
         psi_sqr = qp.utils.abs_squared(torch.fft.fft(psi_tilde))
         rho = (f @ psi_sqr) / L
-        return E, rho
+        return G, rho
 
     def compute(self, state, energy_only: bool) -> None:  # type: ignore
         ...
