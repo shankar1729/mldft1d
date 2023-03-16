@@ -8,7 +8,7 @@ Vshape:
   sigma: 1.0
   seed: 2
   
-lbda: 3.0
+lbda: 1.0
 
 functionals:
   electronic: params.dat
