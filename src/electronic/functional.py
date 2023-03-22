@@ -13,7 +13,7 @@ NNInput = TypeVar("NNInput", torch.Tensor, qp.grid.FieldR)
 
 
 class SchrodingerFunctional(torch.nn.Module):  # type: ignore
-    """Machine-learned CDFT in 1D."""
+    """Machine-learned Electronic DFT in 1D."""
 
     w: NNFunction  #: Weight functions defining spatial nonlocality
     f_ex: NNFunction  #: Free energy density as a function of weighted densities
