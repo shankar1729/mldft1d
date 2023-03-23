@@ -1,6 +1,6 @@
 import qimpy as qp
 import numpy as np
-import hardrods1d as hr
+from mldft1d import Grid1D, get1D, trapz, HardRodsFMT
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
@@ -10,15 +10,15 @@ def main() -> None:
     qp.log.info("Using QimPy " + qp.__version__)
     qp.rc.init()
 
-    grid1d = hr.Grid1D(L=20.0, dz=0.01)
-    cdft = hr.HardRodsFMT(grid1d, R=0.5, T=1.0, n_bulk=0.6)
+    grid1d = Grid1D(L=20.0, dz=0.01)
+    cdft = HardRodsFMT(grid1d, R=0.5, T=1.0, n_bulk=0.6)
 
     # Create external potential profile:
     Vsigma = 1.0
     Vshape = qp.grid.FieldR(
         grid1d.grid, data=(-0.5 * ((grid1d.z - 0.5 * grid1d.L) / Vsigma).square()).exp()
     )
-    z1d = hr.get1D(grid1d.z)
+    z1d = get1D(grid1d.z)
 
     # Run sequence of calculations with varying strength:
     n0 = cdft.n
@@ -42,10 +42,10 @@ def main() -> None:
     cmap = mpl.cm.get_cmap("RdBu")
     # --- plot densities
     for V0, (n, E) in results.items():
-        plt.plot(z1d, hr.get1D(n.data), color=cmap(normalize(V0)), lw=1)
+        plt.plot(z1d, get1D(n.data), color=cmap(normalize(V0)), lw=1)
     plt.axhline(cdft.n_bulk, color="k", ls="dotted", lw=1)
     # --- plot potential for comparison
-    plt.plot(z1d, hr.get1D(Vshape.data), color="k", lw=1, ls="dashed")
+    plt.plot(z1d, get1D(Vshape.data), color="k", lw=1, ls="dashed")
     plt.xlabel(r"$z$")
     plt.ylabel(r"$n(z)$")
     plt.xlim(0, grid1d.L)
@@ -63,7 +63,7 @@ def main() -> None:
     plt.plot(V0_all, E_all, label="CDFT")
     # --- thermodynamic integration
     integrand = np.array([Vshape ^ n for V0, (n, E) in sorted(results.items())])
-    E_TI = hr.trapz(integrand, V0step)
+    E_TI = trapz(integrand, V0step)
     E_TI -= E_TI[np.where(V0_all == 0.0)[0]]  # difference from bulk
     plt.plot(V0_all, E_TI, "r+", label="TI")
     plt.axhline(0, color="k", lw=1, ls="dotted")

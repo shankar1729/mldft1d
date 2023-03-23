@@ -1,13 +1,13 @@
 import qimpy as qp
 import numpy as np
-import hardrods1d as hr
+from mldft1d import Grid1D
 import torch
 
 
 class Schrodinger:
     """Exact 1D Schrodinger solver"""
 
-    grid1d: hr.Grid1D
+    grid1d: Grid1D
     T: float  #: Fermi smearing width
     n_bulk: float  #: Bulk number density of the fluid
     mu: float  #: Bulk chemical potential
@@ -15,7 +15,7 @@ class Schrodinger:
     logn: qp.grid.FieldR  #: State of the classical DFT (effectively local mu)
     V: qp.grid.FieldR  #: External potential
 
-    def __init__(self, grid1d: hr.Grid1D, *, n_bulk: float, T: float) -> None:
+    def __init__(self, grid1d: Grid1D, *, n_bulk: float, T: float) -> None:
         """Initializes to bulk fluid with no external potential."""
         self.grid1d = grid1d
         self.T = T

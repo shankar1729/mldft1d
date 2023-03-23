@@ -6,7 +6,7 @@ import os
 import functools
 from mpi4py import MPI
 from typing import TypeVar, Protocol
-from hardrods1d.mlcdft.nn_function import NNFunction
+from ..mlcdft.nn_function import NNFunction
 
 
 NNInput = TypeVar("NNInput", torch.Tensor, qp.grid.FieldR)
@@ -127,6 +127,7 @@ class SchrodingerFunctional(torch.nn.Module):  # type: ignore
         """Sum module parameter gradients over `comm`."""
         if comm.size > 1:
             for i_param, parameter in enumerate(self.parameters()):
+                assert parameter.grad is not None
                 comm.Allreduce(MPI.IN_PLACE, qp.utils.BufferView(parameter.grad))
 
 

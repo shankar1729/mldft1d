@@ -1,5 +1,5 @@
 import h5py
-import hardrods1d as hr
+from mldft1d import trapz
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -44,7 +44,7 @@ def plot_data(data_file: str) -> None:
         dz = z[1] - z[0]
         integrand = (n @ V) * dz
         dlbda = lbda[1] - lbda[0]
-        E_TI = hr.trapz(integrand, dlbda)
+        E_TI = trapz(integrand, dlbda)
         E_TI -= np.interp(0.0, lbda, E_TI)  # difference from bulk
         plt.plot(lbda, E_TI, "r+", label="TI")
         plt.axhline(0, color="k", lw=1, ls="dotted")

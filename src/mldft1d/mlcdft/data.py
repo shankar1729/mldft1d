@@ -4,14 +4,14 @@ import torch
 import functools
 import qimpy as qp
 import numpy as np
-import hardrods1d as hr
+from mldft1d import Grid1D
 from mpi4py import MPI
 from h5py import File
 from typing import Sequence, TypeVar, List, Optional
 
 
 class Data:
-    grid1d: hr.Grid1D
+    grid1d: Grid1D
     n_perturbations: int
     E: torch.Tensor
     n_bulk: float
@@ -108,7 +108,7 @@ def random_batch_split(
     batch_start = (i_batch * n_data) // n_batches
     batch_stop = ((i_batch + 1) * n_data) // n_batches
     counts = batch_stop - batch_start
-    return random_split(data, counts, seed)
+    return random_split(data, counts, seed)  # type: ignore
 
 
 def random_mpi_split(data: Sequence[T], comm: MPI.Comm, seed: int = 0) -> Sequence[T]:
@@ -118,10 +118,10 @@ def random_mpi_split(data: Sequence[T], comm: MPI.Comm, seed: int = 0) -> Sequen
 
 
 @functools.lru_cache()
-def get_grid1d(L: float, dz: float) -> hr.Grid1D:
+def get_grid1d(L: float, dz: float) -> Grid1D:
     """Get/make a 1D grid of length `L` and spacing `dz` (cached by L, dz)."""
     qp.log.info(f"\n----- Making 1D grid for {L = :.2f} and {dz = :.3f} -----")
-    return hr.Grid1D(L=L, dz=dz, parallel=False)  # use data-parallel instead
+    return Grid1D(L=L, dz=dz, parallel=False)  # use data-parallel instead
 
 
 if __name__ == "__main__":

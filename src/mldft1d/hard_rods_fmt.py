@@ -1,13 +1,13 @@
 import qimpy as qp
 import numpy as np
-import hardrods1d as hr
+from mldft1d import Grid1D
 import torch
 
 
 class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
     """Exact 1D hard rods functional. [Percus 1969]"""
 
-    grid1d: hr.Grid1D
+    grid1d: Grid1D
     R: float  #: Radius / half-length `R`
     T: float  #: Temperature
     n_bulk: float  #: Bulk number density of the fluid
@@ -18,7 +18,7 @@ class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
     w0_tilde: torch.Tensor
     w1_tilde: torch.Tensor
 
-    def __init__(self, grid1d: hr.Grid1D, *, R: float, T: float, n_bulk: float) -> None:
+    def __init__(self, grid1d: Grid1D, *, R: float, T: float, n_bulk: float) -> None:
         """Initializes to bulk fluid with no external potential."""
         super().__init__(
             comm=qp.rc.comm,

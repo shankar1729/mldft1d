@@ -1,9 +1,9 @@
 import qimpy as qp
 import numpy as np
-import hardrods1d as hr
+from mldft1d import Grid1D, get1D, v_shape
 import h5py
 import sys
-from schrodinger import Schrodinger
+from .schrodinger import Schrodinger
 
 
 def run(
@@ -17,16 +17,16 @@ def run(
     filename: str,  #: hdf5 filename, must end with .hdf5
 ) -> None:
 
-    grid1d = hr.Grid1D(L=L, dz=dz)
+    grid1d = Grid1D(L=L, dz=dz)
     cdft = Schrodinger(grid1d, n_bulk=n_bulk, T=T)
     n0 = cdft.n
 
     qp.log.info(f"mu = {cdft.mu}")
-    V = hr.v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
+    V = v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
 
     lbda_arr = get_lbda_arr(**qp.utils.dict.key_cleanup(lbda))
     E = np.zeros_like(lbda_arr)
-    n = np.zeros((len(E), len(hr.get1D(grid1d.z))))
+    n = np.zeros((len(E), len(get1D(grid1d.z))))
 
     # Split runs by sign and in increasing order of perturbation strength:
     abs_index = abs(lbda_arr).argsort()
@@ -37,17 +37,17 @@ def run(
         for index in cur_index:
             cdft.V = lbda_arr[index] * V
             E[index] = float(cdft.minimize())
-            n[index] = hr.get1D(cdft.n.data)
+            n[index] = get1D(cdft.n.data)
 
     f = h5py.File(filename, "w")
-    f["z"] = hr.get1D(grid1d.z)
-    f["V"] = hr.get1D(V.data)
+    f["z"] = get1D(grid1d.z)
+    f["V"] = get1D(V.data)
     f["lbda"] = lbda_arr
     f["n"] = n
     f["E"] = E
     f.attrs["n_bulk"] = n_bulk
     f.attrs["T"] = T
-    f.attrs["R"] = np.nan  # N/A for electronic, but required by hr.mlcdft.Data
+    f.attrs["R"] = np.nan  # N/A for electronic, but required by mlcdft.Data
     f.close()
 
 

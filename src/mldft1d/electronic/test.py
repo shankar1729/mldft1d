@@ -1,10 +1,10 @@
 import os
 import sys
 import qimpy as qp
-import hardrods1d as hr
+from mldft1d import Grid1D, get1D, v_shape, mlcdft
 import matplotlib.pyplot as plt
-from functional import SchrodingerFunctional
-from schrodinger import Schrodinger
+from .functional import SchrodingerFunctional
+from .schrodinger import Schrodinger
 
 
 def run(
@@ -19,13 +19,13 @@ def run(
     run_name: str,
 ):
     # Create grid and external potential:
-    grid1d = hr.Grid1D(L=L, dz=dz)
-    V = lbda * hr.v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
+    grid1d = Grid1D(L=L, dz=dz)
+    V = lbda * v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
 
     # Create functionals:
     cdfts = {"Exact": Schrodinger(grid1d, n_bulk=n_bulk, T=T)}
     for label, filename in functionals.items():
-        cdfts[f"ML {label}"] = hr.mlcdft.Minimizer(
+        cdfts[f"ML {label}"] = mlcdft.Minimizer(
             functional=SchrodingerFunctional.load(qp.rc.comm, load_file=filename),
             grid1d=grid1d,
             n_bulk=n_bulk,
@@ -39,12 +39,12 @@ def run(
     # Plot density and potential:
     if qp.rc.is_head:
         plt.figure(1, figsize=(10, 6))
-        z1d = hr.get1D(grid1d.z)
-        plt.plot(z1d, hr.get1D(V.data) / lbda, label=f"$V/V_0$ (with $V_0 = {lbda}$)")
+        z1d = get1D(grid1d.z)
+        plt.plot(z1d, get1D(V.data) / lbda, label=f"$V/V_0$ (with $V_0 = {lbda}$)")
         for cdft_name, cdft in cdfts.items():
             DeltaE = float(cdft.E) - cdft.e_bulk * grid1d.L
             qp.log.info(f"{cdft_name:>14s}:  mu: {cdft.mu:>7f} DeltaE: {DeltaE:>9f}")
-            plt.plot(z1d, hr.get1D(cdft.n.data), label=f"$n$ ({cdft_name})")
+            plt.plot(z1d, get1D(cdft.n.data), label=f"$n$ ({cdft_name})")
         plt.axhline(n_bulk, color="k", ls="dotted")
         plt.xlabel("z")
         # plt.ylim((min(V.data), None))
@@ -65,7 +65,11 @@ def main() -> None:
     qp.rc.init()
 
     input_dict = qp.utils.dict.key_cleanup(qp.utils.yaml.load(in_file))
-    run_name = f"{run_name}_{input_dict.pop('run_suffix')}" if "run_suffix" in input_dict else run_name
+    run_name = (
+        f"{run_name}_{input_dict.pop('run_suffix')}"
+        if "run_suffix" in input_dict
+        else run_name
+    )
     run(**input_dict, run_name=run_name)
 
 

@@ -130,6 +130,7 @@ class Functional(torch.nn.Module):  # type: ignore
         """Sum module parameter gradients over `comm`."""
         if comm.size > 1:
             for i_param, parameter in enumerate(self.parameters()):
+                assert parameter.grad is not None
                 comm.Allreduce(MPI.IN_PLACE, qp.utils.BufferView(parameter.grad))
 
 

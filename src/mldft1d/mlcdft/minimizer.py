@@ -62,7 +62,9 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
 
         # Gradient computation:
         if not energy_only:
-            state.energy.sum_tensor().backward()  # derivative -> self.logn.data.grad
+            E = state.energy.sum_tensor()
+            assert E is not None
+            E.backward()  # derivative -> self.logn.data.grad
             state.gradient = qp.grid.FieldR(n.grid, data=self.logn.data.grad)
             state.K_gradient = state.gradient
             state.extra = [state.gradient.norm()]
