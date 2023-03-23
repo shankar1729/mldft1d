@@ -65,6 +65,7 @@ def main() -> None:
     qp.rc.init()
 
     input_dict = qp.utils.dict.key_cleanup(qp.utils.yaml.load(in_file))
+    run_name = f"{run_name}_{input_dict.pop('run_suffix')}" if "run_suffix" in input_dict else run_name
     run(**input_dict, run_name=run_name)
 
 
