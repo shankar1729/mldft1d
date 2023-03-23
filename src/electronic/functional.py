@@ -90,7 +90,7 @@ class SchrodingerFunctional(torch.nn.Module):  # type: ignore
             n_zero = torch.zeros(
                 (self.f_ex.n_in,) + (1,) * (len(n.shape) - 1), device=n.device
             )
-            return self.f_ex(n)# - self.f_ex(n_zero)
+            return self.f_ex(n) - self.f_ex(n_zero)
         else:
             return qp.grid.FieldR(n.grid, data=self.get_f_ex(n.data))
 
