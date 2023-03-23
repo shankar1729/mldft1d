@@ -9,6 +9,9 @@ from typing import TypeVar, Protocol
 from ..mlcdft.nn_function import NNFunction
 
 
+# TODO: this file should be merged in functionality with ../functional.py
+
+
 NNInput = TypeVar("NNInput", torch.Tensor, qp.grid.FieldR)
 
 

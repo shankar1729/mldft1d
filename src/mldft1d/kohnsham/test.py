@@ -7,6 +7,9 @@ from .functional import SchrodingerFunctional
 from .schrodinger import Schrodinger
 
 
+# TODO: this file should be merged in functionality with examples/test.py
+
+
 def run(
     *,
     L: float,

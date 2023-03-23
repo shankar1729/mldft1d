@@ -6,6 +6,9 @@ import sys
 from .schrodinger import Schrodinger
 
 
+# TODO: this file should be merged in functionality with ../generate_data.py
+
+
 def run(
     *,
     L: float,
@@ -47,7 +50,7 @@ def run(
     f["E"] = E
     f.attrs["n_bulk"] = n_bulk
     f.attrs["T"] = T
-    f.attrs["R"] = np.nan  # N/A for electronic, but required by mlcdft.Data
+    f.attrs["R"] = np.nan  # N/A for kohnsham, but required by mlcdft.Data
     f.close()
 
 

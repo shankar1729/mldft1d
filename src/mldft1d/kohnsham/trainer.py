@@ -11,6 +11,9 @@ from typing import Sequence, Iterable, Union
 from .functional import SchrodingerFunctional
 
 
+# TODO: this file should be merged in functionality with ../trainer.py
+
+
 class Trainer(torch.nn.Module):  # type: ignore
 
     comm: MPI.Comm
