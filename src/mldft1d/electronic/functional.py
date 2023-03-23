@@ -30,7 +30,7 @@ class SchrodingerFunctional(torch.nn.Module):  # type: ignore
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
-        self.T = 1.0 # Must be changed later
+        self.T = 1.0  # Must be changed later
         self.w = NNFunction(1, n_weights, w_hidden_sizes)
         self.f_ex = NNFunction(n_weights, n_weights, f_ex_hidden_sizes)
         self.rc = rc
@@ -90,7 +90,7 @@ class SchrodingerFunctional(torch.nn.Module):  # type: ignore
             n_zero = torch.zeros(
                 (self.f_ex.n_in,) + (1,) * (len(n.shape) - 1), device=n.device
             )
-            return self.f_ex(n)# - self.f_ex(n_zero)
+            return self.f_ex(n) - self.f_ex(n_zero)
         else:
             return qp.grid.FieldR(n.grid, data=self.get_f_ex(n.data))
 
@@ -114,7 +114,7 @@ class SchrodingerFunctional(torch.nn.Module):  # type: ignore
         n = torch.tensor(n_bulk, device=qp.rc.device)
         n.requires_grad = True
         n_bar = n.repeat(self.w.n_out)
-        energy_density = (n_bar @ self.get_f_ex(n_bar))
+        energy_density = n_bar @ self.get_f_ex(n_bar)
         return torch.autograd.grad(energy_density, n, create_graph=create_graph)[0]
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:

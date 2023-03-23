@@ -4,4 +4,4 @@ precommit:
 
 .PHONY: typecheck
 typecheck:
-	cd src && mypy -p hardrods1d
+	cd src && mypy -p mldft1d
