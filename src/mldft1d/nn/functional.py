@@ -6,26 +6,25 @@ import os
 import functools
 from mpi4py import MPI
 from typing import TypeVar, Protocol
-from ..mlcdft.nn_function import NNFunction
-
-
-# TODO: this file should be merged in functionality with ../functional.py
+from .function import Function
 
 
 NNInput = TypeVar("NNInput", torch.Tensor, qp.grid.FieldR)
 
 
-class SchrodingerFunctional(torch.nn.Module):  # type: ignore
-    """Machine-learned Electronic DFT in 1D."""
+class Functional(torch.nn.Module):  # type: ignore
+    """Machine-learned CDFT in 1D."""
 
-    w: NNFunction  #: Weight functions defining spatial nonlocality
-    f_ex: NNFunction  #: Free energy density as a function of weighted densities
+    T: float  #: Temperature
+    w: Function  #: Weight functions defining spatial nonlocality
+    f_ex: Function  #: Free energy density as a function of weighted densities
     rc: float  #: If nonzero, compute weight function in real space with this cutoff
 
     def __init__(
         self,
         comm: MPI.Comm,
         *,
+        T: float,
         n_weights: int,
         w_hidden_sizes: list[int],
         f_ex_hidden_sizes: list[int],
@@ -33,9 +32,9 @@ class SchrodingerFunctional(torch.nn.Module):  # type: ignore
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
-        self.T = 1.0  # Must be changed later
-        self.w = NNFunction(1, n_weights, w_hidden_sizes)
-        self.f_ex = NNFunction(n_weights, n_weights, f_ex_hidden_sizes)
+        self.T = T
+        self.w = Function(1, n_weights, w_hidden_sizes)
+        self.f_ex = Function(n_weights, n_weights, f_ex_hidden_sizes)
         self.rc = rc
         if comm.size > 1:
             self.bcast_parameters(comm)
@@ -47,7 +46,7 @@ class SchrodingerFunctional(torch.nn.Module):  # type: ignore
         *,
         load_file: str = "",
         **kwargs,
-    ) -> SchrodingerFunctional:
+    ) -> Functional:
         """
         Initialize functional from `kwargs` or from params file if given `load_file`.
         Any parameter in `kwargs` must be consistent with the params file, if given.
@@ -67,7 +66,7 @@ class SchrodingerFunctional(torch.nn.Module):  # type: ignore
                     params[key] = value
 
         # Create functional and load state if available:
-        functional = SchrodingerFunctional(comm, **params)
+        functional = Functional(comm, **params)
         if state:
             functional.load_state_dict(state)
         return functional
@@ -75,6 +74,7 @@ class SchrodingerFunctional(torch.nn.Module):  # type: ignore
     def save(self, filename: str, comm: MPI.Comm) -> None:
         """Save parameters to specified filename."""
         params = dict(
+            T=self.T,
             n_weights=self.w.n_out,
             w_hidden_sizes=self.w.n_hidden,
             f_ex_hidden_sizes=self.f_ex.n_hidden,
@@ -101,15 +101,15 @@ class SchrodingerFunctional(torch.nn.Module):  # type: ignore
         w_tilde = self.get_w_tilde(n.grid, len(n.data.shape) + 1)
         n_bar = n[None, ...].convolve(w_tilde)
         energy = qp.Energy()
-        energy["Omega0"] = n ^ (V_minus_mu)  # Ideal-gas part
-        energy["Fex"] = (n_bar ^ self.get_f_ex(n_bar)).sum(dim=0)  # Excess
+        energy["Omega0"] = n ^ (self.T * n.log() + V_minus_mu)  # Ideal-gas part
+        energy["Fex"] = self.T * (n_bar ^ self.get_f_ex(n_bar)).sum(dim=0)  # Excess
         return energy
 
     def get_energy_bulk(self, n_bulk: float, mu: float) -> torch.Tensor:
         """Compute bulk energy density."""
         n = torch.tensor(n_bulk, device=qp.rc.device)
         n_bar = n.repeat(self.w.n_out)
-        return (n_bar @ self.get_f_ex(n_bar)) - mu * n
+        return self.T * (n * n.log() + n_bar @ self.get_f_ex(n_bar)) - mu * n
 
     def get_mu(self, n_bulk: float, create_graph: bool = False) -> torch.Tensor:
         """Compute chemical potential that will produce target density `n_bulk`."""
@@ -117,7 +117,7 @@ class SchrodingerFunctional(torch.nn.Module):  # type: ignore
         n = torch.tensor(n_bulk, device=qp.rc.device)
         n.requires_grad = True
         n_bar = n.repeat(self.w.n_out)
-        energy_density = n_bar @ self.get_f_ex(n_bar)
+        energy_density = self.T * (n * n.log() + n_bar @ self.get_f_ex(n_bar))
         return torch.autograd.grad(energy_density, n, create_graph=create_graph)[0]
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:
@@ -135,7 +135,7 @@ class SchrodingerFunctional(torch.nn.Module):  # type: ignore
 
 
 class WeightCalculator(Protocol):
-    def __call__(self, w: NNFunction, n_dim_tot: int) -> torch.Tensor:
+    def __call__(self, w: Function, n_dim_tot: int) -> torch.Tensor:
         ...
 
 
@@ -156,7 +156,7 @@ class WeightCalculatorG:
         iG = grid.get_mesh("H").to(torch.double)  # half-space
         self.Gmag = (iG @ grid.lattice.Gbasis.T).norm(dim=-1)
 
-    def __call__(self, w: NNFunction, n_dim_tot: int) -> torch.Tensor:
+    def __call__(self, w: Function, n_dim_tot: int) -> torch.Tensor:
         bcast_shape = (1,) * (n_dim_tot - 3) + self.Gmag.shape
         w_tilde = w(self.Gmag.view(bcast_shape))
         w_zero = w_tilde[..., :1]  # G = 0 component of w_tilde (with same dimensions)
@@ -189,7 +189,7 @@ class WeightCalculatorR:
             abs(z_sup) < rc, 1.0 + torch.cos(z_sup * np.pi / rc), 0.0
         )  # value and derivative are both zero at rc
 
-    def __call__(self, w: NNFunction, n_dim_tot: int) -> torch.Tensor:
+    def __call__(self, w: Function, n_dim_tot: int) -> torch.Tensor:
         # Compute in real space (enforce positive, bounded and cutoff):
         w_real = self.prefactor / (1.0 + w(self.z_sup_sq).square())
         # Convert to half reciprocal space and downselect to orginal cell:

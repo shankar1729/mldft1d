@@ -45,7 +45,7 @@ class Data:
 
     def __repr__(self) -> str:
         return (
-            "hardrods1d.mlcdft.Data("
+            "hardrods1d.Data("
             f"T={self.T}, R={self.R}, n_bulk={self.n_bulk}, L={self.grid1d.L:.2f}, "
             f"n_perturbations={self.n_perturbations}"
             ")"

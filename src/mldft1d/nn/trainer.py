@@ -5,7 +5,8 @@ import torch
 import itertools
 import numpy as np
 import qimpy as qp
-from mldft1d import mlcdft
+from ..data import Data, random_split, random_batch_split, random_mpi_split, fuse_data
+from ..nn import Functional
 from mpi4py import MPI
 from typing import Sequence, Iterable, Union
 
@@ -13,16 +14,16 @@ from typing import Sequence, Iterable, Union
 class Trainer(torch.nn.Module):  # type: ignore
 
     comm: MPI.Comm
-    functional: mlcdft.Functional
+    functional: Functional
     n_train_tot: int  #: Total number of training data
     n_test_tot: int  #: Total number of testing data
-    data_train: Sequence[mlcdft.Data]  #: Training data (local to process)
-    data_test: Sequence[mlcdft.Data]  #: Testing data (local to process)
+    data_train: Sequence[Data]  #: Training data (local to process)
+    data_test: Sequence[Data]  #: Testing data (local to process)
 
     def __init__(
         self,
         comm: MPI.Comm,
-        functional: mlcdft.Functional,
+        functional: Functional,
         filenames: Sequence[str],
         train_fraction: float,
     ) -> None:
@@ -33,25 +34,23 @@ class Trainer(torch.nn.Module):  # type: ignore
         # Split filenames into train and test sets:
         self.n_train_tot = int(len(filenames) * train_fraction)
         self.n_test_tot = len(filenames) - self.n_train_tot
-        filenames_train_all, filenames_test_all = mlcdft.random_split(
+        filenames_train_all, filenames_test_all = random_split(
             filenames, [self.n_train_tot, self.n_test_tot], seed=0
         )
 
         # Split filenames within each set over MPI:
-        filenames_train = mlcdft.random_mpi_split(filenames_train_all, comm)
-        filenames_test = mlcdft.random_mpi_split(filenames_test_all, comm)
+        filenames_train = random_mpi_split(filenames_train_all, comm)
+        filenames_test = random_mpi_split(filenames_test_all, comm)
 
         # Load training set:
-        self.data_train = [mlcdft.Data(filename) for filename in filenames_train]
+        self.data_train = [Data(filename) for filename in filenames_train]
 
         # Load and fuse test set:
         qp.log.info("\nTest set:")
-        self.data_test = mlcdft.fuse_data(
-            [mlcdft.Data(filename) for filename in filenames_test]
-        )
+        self.data_test = fuse_data([Data(filename) for filename in filenames_test])
 
         # Report loaded data:
-        def report(name: str, data_set: Sequence[mlcdft.Data], n_total: int) -> None:
+        def report(name: str, data_set: Sequence[Data], n_total: int) -> None:
             qp.log.info(f"\n{name} set ({len(data_set)} local of {n_total}):")
             for data in data_set:
                 qp.log.info(f"  {data}")
@@ -72,7 +71,7 @@ class Trainer(torch.nn.Module):  # type: ignore
         assert Tmin == Tmax == functional.T
         assert Rmin == Rmax
 
-    def forward(self, data: mlcdft.Data) -> torch.Tensor:
+    def forward(self, data: Data) -> torch.Tensor:
         """Compute loss function for one complete perturbation data-set"""
         # Set mu
         mu = self.functional.get_mu(data.n_bulk, create_graph=True)
@@ -93,7 +92,7 @@ class Trainer(torch.nn.Module):  # type: ignore
         loss_total = 0.0
         n_perturbations = 0
         n_batches = qp.utils.ceildiv(self.n_train_tot, batch_size)
-        for data_batch in mlcdft.random_batch_split(self.data_train, n_batches):
+        for data_batch in random_batch_split(self.data_train, n_batches):
             qp.rc.comm.Barrier()
             # Step using total gradient over batch:
             optimizer.zero_grad()
@@ -124,7 +123,7 @@ class Trainer(torch.nn.Module):  # type: ignore
 
 def load_data(
     comm: MPI.Comm,
-    functional: mlcdft.Functional,
+    functional: Functional,
     *,
     filenames: Union[str, Sequence[str]],
     train_fraction: float = 0.8,
@@ -193,7 +192,7 @@ def run(
     torch.random.manual_seed(0)
     trainer = load_data(
         comm,
-        mlcdft.Functional.load(comm, **qp.utils.dict.key_cleanup(functional)),
+        Functional.load(comm, **qp.utils.dict.key_cleanup(functional)),
         **qp.utils.dict.key_cleanup(data),
     )
     run_training_loop(trainer, **qp.utils.dict.key_cleanup(train))
@@ -201,7 +200,7 @@ def run(
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python -m hardrods1d.mlcdft.trainer <input.yaml>")
+        print("Usage: python -m hardrods1d.trainer <input.yaml>")
         exit(1)
     in_file = sys.argv[1]
 

@@ -3,7 +3,7 @@ import qimpy as qp
 import torch
 
 
-class NNFunction(torch.nn.Module):
+class Function(torch.nn.Module):
     n_in: int  #: Number of input features
     n_out: int  #: Number of output features
     n_hidden: list[int]  #: Number of neurons in each hidden layer

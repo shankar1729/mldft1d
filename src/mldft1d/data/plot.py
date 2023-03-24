@@ -59,7 +59,7 @@ def plot_data(data_file: str) -> None:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python plot_data.py <data.h5>")
+        print("Usage: python plot.py <data.h5>")
         exit(1)
     data_file = sys.argv[1]
     plot_data(data_file)

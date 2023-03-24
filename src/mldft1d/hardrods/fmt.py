@@ -4,7 +4,7 @@ from mldft1d import Grid1D
 import torch
 
 
-class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
+class FMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
     """Exact 1D hard rods functional. [Percus 1969]"""
 
     grid1d: Grid1D
@@ -23,7 +23,7 @@ class HardRodsFMT(qp.utils.Minimize[qp.grid.FieldR]):  # type: ignore
         super().__init__(
             comm=qp.rc.comm,
             checkpoint_in=qp.utils.CpPath(),
-            name="HardRodsFMT",
+            name="FMT",
             n_iterations=1000,
             energy_threshold=1e-9,
             extra_thresholds={"|grad|": 1e-8},

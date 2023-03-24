@@ -1,7 +1,10 @@
 import os
 import sys
 import qimpy as qp
-from mldft1d import Grid1D, get1D, v_shape, HardRodsFMT, mlcdft
+from mldft1d import Grid1D, get1D
+from mldft1d.data import v_shape
+from mldft1d.nn import Functional, Minimizer
+from mldft1d.hardrods import FMT
 import matplotlib.pyplot as plt
 
 
@@ -22,10 +25,10 @@ def run(
     V = lbda * v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
 
     # Create functionals:
-    cdfts = {"Exact": HardRodsFMT(grid1d, R=R, T=T, n_bulk=n_bulk)}
+    cdfts = {"Exact": FMT(grid1d, R=R, T=T, n_bulk=n_bulk)}
     for label, filename in functionals.items():
-        cdfts[f"ML {label}"] = mlcdft.Minimizer(
-            functional=mlcdft.Functional.load(qp.rc.comm, load_file=filename),
+        cdfts[f"ML {label}"] = Minimizer(
+            functional=Functional.load(qp.rc.comm, load_file=filename),
             grid1d=grid1d,
             n_bulk=n_bulk,
         )

@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from .gen_data_electronic import main
+from .generate import main
 
 n_bulks = np.array([0.4, 0.6, 0.8])
 Ls = np.array([2, 5, 10])

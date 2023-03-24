@@ -1,6 +1,8 @@
 import qimpy as qp
 import numpy as np
-from mldft1d import Grid1D, get1D, v_shape, HardRodsFMT
+from .. import Grid1D, get1D
+from . import v_shape
+from ..hardrods import FMT
 import h5py
 import sys
 
@@ -18,7 +20,7 @@ def run(
 ) -> None:
 
     grid1d = Grid1D(L=L, dz=dz)
-    cdft = HardRodsFMT(grid1d, R=R, T=T, n_bulk=n_bulk)
+    cdft = FMT(grid1d, R=R, T=T, n_bulk=n_bulk)
     n0 = cdft.n
 
     qp.log.info(f"mu = {cdft.mu}")
@@ -58,7 +60,7 @@ def get_lbda_arr(*, min: float, max: float, step: float) -> np.ndarray:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python generate_data.py <input.yaml>")
+        print("Usage: python generate.py <input.yaml>")
         exit(1)
     in_file = sys.argv[1]
 

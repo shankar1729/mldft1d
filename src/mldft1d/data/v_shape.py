@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import qimpy as qp
-from .grid1d import Grid1D
+from .. import Grid1D
 from typing import Dict, Any
 
 
