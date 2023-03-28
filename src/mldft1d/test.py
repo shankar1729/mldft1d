@@ -1,7 +1,7 @@
 import os
 import sys
 import qimpy as qp
-from . import Grid1D, get1D, Minimizer, protocols, hardrods
+from . import Grid1D, get1D, Minimizer, protocols, hardrods, kohnsham
 from .data import v_shape
 from typing import Callable
 import matplotlib.pyplot as plt
@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 make_dft_map: dict[str, Callable[..., protocols.DFT]] = {
     "hardrods_exact": hardrods.make_dft.exact,
     "hardrods_ml": hardrods.make_dft.ml,
+    "kohnsham_exact": kohnsham.make_dft.exact,
+    "kohnsham_ml": kohnsham.make_dft.ml,
 }  #: Recognized DFTs that can be loaded from YAML input
 
 

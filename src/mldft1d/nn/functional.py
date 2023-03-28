@@ -15,7 +15,6 @@ NNInput = TypeVar("NNInput", torch.Tensor, qp.grid.FieldR)
 class Functional(torch.nn.Module):  # type: ignore
     """Machine-learned DFT in 1D."""
 
-    T: float  #: Temperature
     w: Function  #: Weight functions defining spatial nonlocality
     f_ex: Function  #: Free energy density as a function of weighted densities
     rc: float  #: If nonzero, compute weight function in real space with this cutoff
@@ -24,7 +23,6 @@ class Functional(torch.nn.Module):  # type: ignore
         self,
         comm: MPI.Comm,
         *,
-        T: float,
         n_weights: int,
         w_hidden_sizes: list[int],
         f_ex_hidden_sizes: list[int],
@@ -32,7 +30,6 @@ class Functional(torch.nn.Module):  # type: ignore
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
-        self.T = T
         self.w = Function(1, n_weights, w_hidden_sizes)
         self.f_ex = Function(n_weights, n_weights, f_ex_hidden_sizes)
         self.rc = rc
@@ -60,6 +57,8 @@ class Functional(torch.nn.Module):  # type: ignore
             for key, value in params_in.items():
                 if key == "state":
                     state = value
+                elif key == "T":  # ignore T if present (TODO: remove shortly)
+                    pass  # temporary hack for compatibility with old params files
                 elif key in params:
                     assert params[key] == value
                 else:
@@ -74,7 +73,6 @@ class Functional(torch.nn.Module):  # type: ignore
     def save(self, filename: str, comm: MPI.Comm) -> None:
         """Save parameters to specified filename."""
         params = dict(
-            T=self.T,
             n_weights=self.w.n_out,
             w_hidden_sizes=self.w.n_hidden,
             f_ex_hidden_sizes=self.f_ex.n_hidden,
