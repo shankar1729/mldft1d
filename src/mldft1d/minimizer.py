@@ -3,11 +3,12 @@ import numpy as np
 import torch
 from .grid1d import Grid1D
 from .protocols import Functional, get_mu
+from typing import Sequence
 
 
 class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
 
-    functionals: tuple[Functional]  #: Pieces of the DFT functional
+    functionals: Sequence[Functional]  #: Pieces of the DFT functional
     grid1d: Grid1D
     logn: qp.grid.FieldR  #: State of the DFT (effectively local mu)
     n_bulk: float  #: Bulk number density
@@ -18,7 +19,7 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
     def __init__(
         self,
         *,
-        functionals: tuple[Functional],
+        functionals: Sequence[Functional],
         grid1d: Grid1D,
         n_bulk: float,
         name: str,

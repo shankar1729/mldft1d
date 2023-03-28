@@ -1,51 +1,44 @@
 import os
 import sys
 import qimpy as qp
-from mldft1d import Grid1D, get1D, Minimizer, protocols
-from mldft1d.data import v_shape
-from mldft1d.nn import Functional
-from mldft1d.hardrods import IdealGas, FMT
+from . import Grid1D, get1D, Minimizer, protocols, hardrods
+from .data import v_shape
+from typing import Callable
 import matplotlib.pyplot as plt
+
+
+make_dft_map: dict[str, Callable[..., protocols.DFT]] = {
+    "hardrods_exact": hardrods.make_dft.exact,
+    "hardrods_ml": hardrods.make_dft.ml,
+}  #: Recognized DFTs that can be loaded from YAML input
 
 
 def run(
     *,
     L: float,
     dz: float,
-    R: float,
-    T: float,
     n_bulk: float,
     Vshape: dict,
     lbda: float,
     functionals: dict,
     run_name: str,
+    **dft_common_args,
 ):
     # Create grid and external potential:
     grid1d = Grid1D(L=L, dz=dz)
     V = lbda * v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
 
-    # Create functionals:
-    dfts = dict[str, protocols.Variational]()
-    dfts["Exact"] = Minimizer(
-        functionals=(IdealGas(T), FMT(grid1d, T=T, R=R)),
-        grid1d=grid1d,
-        n_bulk=n_bulk,
-        name="FMT",
-    )
-    for label, filename in functionals.items():
-        dfts[f"ML {label}"] = Minimizer(
-            functionals=(
-                IdealGas(T),
-                Functional.load(qp.rc.comm, load_file=filename),
-            ),
-            grid1d=grid1d,
-            n_bulk=n_bulk,
-            name="MLCDFT",
-        )
+    # Create DFTs:
+    dfts = dict[str, protocols.DFT]()
+    for label, dft_dict in functionals.items():
+        for dft_name, dft_args in qp.utils.dict.key_cleanup(dft_dict).items():
+            dfts[label] = make_dft_map[dft_name](
+                grid1d=grid1d, n_bulk=n_bulk, **dft_args, **dft_common_args
+            )
 
     for dft in dfts.values():
         dft.V = V
-        if isinstance(dft, qp.utils.Minimize):
+        if isinstance(dft, Minimizer):
             dft.finite_difference_test(dft.random_direction())
         dft.minimize()  # equilibrium results in dft.energy and dft.n
 
@@ -68,7 +61,7 @@ def run(
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python test.py <input.yaml>")
+        print("Usage: python -m mldft1d.test <input.yaml>")
         exit(1)
     in_file = sys.argv[1]
     run_name = os.path.splitext(in_file)[0]

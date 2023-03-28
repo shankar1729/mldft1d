@@ -1,6 +1,5 @@
 L: 20.0
 dz: 0.05
-R: 0.5
 T: 1.0
 n_bulk: 0.6
 
@@ -12,5 +11,12 @@ Vshape:
 lbda: 3.0
 
 functionals:
-  2-10-10: train-real-2-10-10/params.dat
-  2-30-30: train-real-2-30-30/params.dat
+  Exact:
+    hardrods-exact:
+      R: 0.5
+  ML-2-10-10:
+    hardrods-ml:
+      load_file: train-real-2-10-10/params.dat
+  ML-2-30-30:
+    hardrods-ml:
+      load_file: train-real-2-30-30/params.dat

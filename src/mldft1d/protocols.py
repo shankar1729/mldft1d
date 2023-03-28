@@ -16,9 +16,10 @@ class Functional(Protocol):
         Inputs and outputs are tensors to support autograd."""
 
 
-class Variational(Protocol):
+class DFT(Protocol):
     """An overall DFT that minimizes energy for a given external potential."""
 
+    mu: float  #: Chemical potential
     V: qp.grid.FieldR  #: External potential
     energy: qp.Energy  #: Equilibrium energy components, available after `minimize`
 
