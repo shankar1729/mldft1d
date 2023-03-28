@@ -1,44 +1,47 @@
 import qimpy as qp
 import numpy as np
 import torch
-from ..grid1d import Grid1D
-from .functional import Functional
+from .grid1d import Grid1D
+from .protocols import Functional, get_mu
 
 
 class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
 
-    functional: Functional  #: Classical DFT free energy functional
+    functionals: tuple[Functional]  #: Pieces of the DFT functional
     grid1d: Grid1D
-    logn: qp.grid.FieldR  #: State of the classical DFT (effectively local mu)
-    V: qp.grid.FieldR  #: External potential
-    n_bulk: float  #: Bulk number density of the fluid
+    logn: qp.grid.FieldR  #: State of the DFT (effectively local mu)
+    n_bulk: float  #: Bulk number density
     mu: float  #: Bulk chemical potential
-    e_bulk: float  #: Bulk energy density
-    T: float  #: Temperature
+    V: qp.grid.FieldR  #: External potential
+    energy: qp.Energy  #: Equilibrium energy components
 
     def __init__(
-        self, *, functional: Functional, grid1d: Grid1D, n_bulk: float
+        self,
+        *,
+        functionals: tuple[Functional],
+        grid1d: Grid1D,
+        n_bulk: float,
+        name: str,
     ) -> None:
         super().__init__(
             comm=qp.rc.comm,
             checkpoint_in=qp.utils.CpPath(),
-            name="MLCDFT",
+            name=name,
             n_iterations=1000,
             energy_threshold=1e-9,
             extra_thresholds={"|grad|": 1e-8},
             method="cg",
             n_consecutive=1,
         )
-        self.functional = functional
+        self.functionals = functionals
         self.grid1d = grid1d
         self.n_bulk = n_bulk
-        self.mu = functional.get_mu(n_bulk).item()
-        self.e_bulk = functional.get_energy_bulk(n_bulk, self.mu).item()
-        self.T = functional.T
+        self.mu = get_mu(functionals, n_bulk)
         self.logn = qp.grid.FieldR(
             grid1d.grid, data=torch.full_like(grid1d.z, np.log(self.n_bulk))
         )
         self.V = self.logn.zeros_like()
+        self.energy = qp.Energy()
 
     @property
     def n(self) -> qp.grid.FieldR:
@@ -46,8 +49,8 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
         return self.logn.exp()
 
     @n.setter
-    def n(self, new_n: qp.grid.FieldR) -> None:
-        self.logn = new_n.log()
+    def n(self, n_in: qp.grid.FieldR) -> None:
+        self.logn = n_in.log()
 
     def step(self, direction: qp.grid.FieldR, step_size: float) -> None:
         self.logn += step_size * direction
@@ -58,7 +61,11 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
             self.logn.data.grad = None
 
         n = self.n
-        state.energy = self.functional.get_energy(n, self.V - self.mu)
+        energy = self.energy
+        energy["Ext"] = n ^ (self.V - self.mu)
+        for functional in self.functionals:
+            energy[functional.__class__.__name__] = functional.get_energy(n)
+        state.energy = energy
 
         # Gradient computation:
         if not energy_only:

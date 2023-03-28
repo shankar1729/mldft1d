@@ -29,12 +29,6 @@ class Schrodinger:
         self.e_bulk = (np.pi**2) * (n_bulk**3) / 24
         self.mu = (np.pi * n_bulk) ** 2 / 8
 
-    def step(self, direction: qp.grid.FieldR, step_size: float) -> None:
-        self.logn += step_size * direction
-
-    def finite_difference_test(*args, **kwargs):
-        ...
-
     def minimize(self):
         Nk = 2 * np.ceil(2 * np.pi / (self.grid1d.L * self.T))  # assuming vF ~ 1
         k = np.arange(Nk // 2 + 1) * (1.0 / Nk)  # in fractional coords, symm reduced
@@ -89,9 +83,3 @@ class Schrodinger:
         psi_sqr = qp.utils.abs_squared(torch.fft.fft(psi_tilde))
         rho = (f @ psi_sqr) / L
         return G, rho
-
-    def compute(self, state, energy_only: bool) -> None:  # type: ignore
-        ...
-
-    def random_direction(self):
-        ...

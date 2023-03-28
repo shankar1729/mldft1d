@@ -1,10 +1,10 @@
 import os
 import sys
 import qimpy as qp
-from mldft1d import Grid1D, get1D
+from mldft1d import Grid1D, get1D, Minimizer, protocols
 from mldft1d.data import v_shape
-from mldft1d.nn import Functional, Minimizer
-from mldft1d.hardrods import FMT
+from mldft1d.nn import Functional
+from mldft1d.hardrods import IdealGas, FMT
 import matplotlib.pyplot as plt
 
 
@@ -25,28 +25,39 @@ def run(
     V = lbda * v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
 
     # Create functionals:
-    cdfts = {"Exact": FMT(grid1d, R=R, T=T, n_bulk=n_bulk)}
+    dfts = dict[str, protocols.Variational]()
+    dfts["Exact"] = Minimizer(
+        functionals=(IdealGas(T), FMT(grid1d, T=T, R=R)),
+        grid1d=grid1d,
+        n_bulk=n_bulk,
+        name="FMT",
+    )
     for label, filename in functionals.items():
-        cdfts[f"ML {label}"] = Minimizer(
-            functional=Functional.load(qp.rc.comm, load_file=filename),
+        dfts[f"ML {label}"] = Minimizer(
+            functionals=(
+                IdealGas(T),
+                Functional.load(qp.rc.comm, load_file=filename),
+            ),
             grid1d=grid1d,
             n_bulk=n_bulk,
+            name="MLCDFT",
         )
 
-    for cdft in cdfts.values():
-        cdft.V = V
-        cdft.finite_difference_test(cdft.random_direction())
-        cdft.E = cdft.minimize()
+    for dft in dfts.values():
+        dft.V = V
+        if isinstance(dft, qp.utils.Minimize):
+            dft.finite_difference_test(dft.random_direction())
+        dft.minimize()  # equilibrium results in dft.energy and dft.n
 
     # Plot density and potential:
     if qp.rc.is_head:
         plt.figure(1, figsize=(10, 6))
         z1d = get1D(grid1d.z)
         plt.plot(z1d, get1D(V.data) / lbda, label=f"$V/V_0$ (with $V_0 = {lbda}$)")
-        for cdft_name, cdft in cdfts.items():
-            DeltaE = float(cdft.E) - cdft.e_bulk * grid1d.L
-            qp.log.info(f"{cdft_name:>14s}:  mu: {cdft.mu:>7f} DeltaE: {DeltaE:>9f}")
-            plt.plot(z1d, get1D(cdft.n.data), label=f"$n$ ({cdft_name})")
+        for dft_name, dft in dfts.items():
+            E = float(dft.energy)
+            qp.log.info(f"{dft_name:>14s}:  mu: {dft.mu:>7f}  E: {E:>9f}")
+            plt.plot(z1d, get1D(dft.n.data), label=f"$n$ ({dft_name})")
         plt.axhline(n_bulk, color="k", ls="dotted")
         plt.xlabel("z")
         plt.ylim(0, None)

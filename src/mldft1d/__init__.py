@@ -1,5 +1,15 @@
-__all__ = ["Grid1D", "get1D", "trapz", "nn", "hardrods", "kohnsham"]
+__all__ = [
+    "Grid1D",
+    "get1D",
+    "trapz",
+    "protocols",
+    "nn",
+    "hardrods",
+    "kohnsham",
+    "Minimizer",
+]
 
 
 from .grid1d import Grid1D, get1D, trapz
-from . import nn, hardrods, kohnsham
+from . import protocols, nn, hardrods, kohnsham
+from .minimizer import Minimizer

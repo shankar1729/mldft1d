@@ -1,6 +1,5 @@
-__all__ = ["Function", "Functional", "Minimizer"]
+__all__ = ["Function", "Functional"]
 
 
 from .function import Function
 from .functional import Functional
-from .minimizer import Minimizer

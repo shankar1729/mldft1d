@@ -13,7 +13,7 @@ NNInput = TypeVar("NNInput", torch.Tensor, qp.grid.FieldR)
 
 
 class Functional(torch.nn.Module):  # type: ignore
-    """Machine-learned CDFT in 1D."""
+    """Machine-learned DFT in 1D."""
 
     T: float  #: Temperature
     w: Function  #: Weight functions defining spatial nonlocality
@@ -97,28 +97,15 @@ class Functional(torch.nn.Module):  # type: ignore
         else:
             return qp.grid.FieldR(n.grid, data=self.get_f_ex(n.data))
 
-    def get_energy(self, n: qp.grid.FieldR, V_minus_mu: qp.grid.FieldR) -> qp.Energy:
+    def get_energy(self, n: qp.grid.FieldR) -> torch.Tensor:
         w_tilde = self.get_w_tilde(n.grid, len(n.data.shape) + 1)
         n_bar = n[None, ...].convolve(w_tilde)
-        energy = qp.Energy()
-        energy["Omega0"] = n ^ (self.T * n.log() + V_minus_mu)  # Ideal-gas part
-        energy["Fex"] = self.T * (n_bar ^ self.get_f_ex(n_bar)).sum(dim=0)  # Excess
-        return energy
+        return (n_bar ^ self.get_f_ex(n_bar)).sum(dim=0)  # Excess
 
-    def get_energy_bulk(self, n_bulk: float, mu: float) -> torch.Tensor:
+    def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
         """Compute bulk energy density."""
-        n = torch.tensor(n_bulk, device=qp.rc.device)
         n_bar = n.repeat(self.w.n_out)
-        return self.T * (n * n.log() + n_bar @ self.get_f_ex(n_bar)) - mu * n
-
-    def get_mu(self, n_bulk: float, create_graph: bool = False) -> torch.Tensor:
-        """Compute chemical potential that will produce target density `n_bulk`."""
-        # Bulk condition: (d/dn) [f_id(n) + f_ex(w * n)] = mu
-        n = torch.tensor(n_bulk, device=qp.rc.device)
-        n.requires_grad = True
-        n_bar = n.repeat(self.w.n_out)
-        energy_density = self.T * (n * n.log() + n_bar @ self.get_f_ex(n_bar))
-        return torch.autograd.grad(energy_density, n, create_graph=create_graph)[0]
+        return n_bar @ self.get_f_ex(n_bar)
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:
         """Broadcast i.e. synchronize module parameters over `comm`."""
