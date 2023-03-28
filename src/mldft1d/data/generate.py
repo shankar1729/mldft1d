@@ -2,28 +2,35 @@ import qimpy as qp
 import numpy as np
 from .. import Grid1D, get1D
 from . import v_shape
-from ..hardrods import FMT
+from .. import hardrods, kohnsham, protocols
+from typing import Callable
 import h5py
 import sys
+
+
+make_exact_dft_map: dict[str, Callable[..., protocols.DFT]] = {
+    "hardrods": hardrods.make_dft.exact,
+    "kohnsham": kohnsham.make_dft.exact,
+}  #: Recognized exact DFTs that can be used for data generation
 
 
 def run(
     *,
     L: float,
     dz: float,
-    R: float,  #: Radius / half-length `R`
-    T: float,  #: Temperature
     n_bulk: float,  #: Bulk number density of the fluid
     Vshape: dict,  #: Potential shape and parameters
     lbda: dict,  #: min: float, max: float, step: float,
     filename: str,  #: hdf5 filename, must end with .hdf5
+    functional: str,  #: name of exact functional to use (hardrods | kohnsham)
+    **dft_kwargs,  #: extra keyword arguments forwarded to the exact dft
 ) -> None:
 
     grid1d = Grid1D(L=L, dz=dz)
-    cdft = FMT(grid1d, R=R, T=T, n_bulk=n_bulk)
-    n0 = cdft.n
+    dft = make_exact_dft_map[functional](grid1d=grid1d, n_bulk=n_bulk, **dft_kwargs)
+    n0 = dft.n
 
-    qp.log.info(f"mu = {cdft.mu}")
+    qp.log.info(f"mu = {dft.mu}")
     V = v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
 
     lbda_arr = get_lbda_arr(**qp.utils.dict.key_cleanup(lbda))
@@ -35,11 +42,11 @@ def run(
     pos_index = [i for i in abs_index if lbda_arr[i] >= 0.0]
     neg_index = [i for i in abs_index if lbda_arr[i] < 0.0]
     for cur_index in (neg_index, pos_index):
-        cdft.n = n0
+        dft.n = n0
         for index in cur_index:
-            cdft.V = lbda_arr[index] * V
-            E[index] = float(cdft.minimize())
-            n[index] = get1D(cdft.n.data)
+            dft.V = lbda_arr[index] * V
+            E[index] = float(dft.minimize())
+            n[index] = get1D(dft.n.data)
 
     f = h5py.File(filename, "w")
     f["z"] = get1D(grid1d.z)
@@ -48,8 +55,8 @@ def run(
     f["n"] = n
     f["E"] = E
     f.attrs["n_bulk"] = n_bulk
-    f.attrs["T"] = T
-    f.attrs["R"] = R
+    for dft_arg_name, dft_arg_value in dft_kwargs.items():
+        f.attrs[dft_arg_name] = dft_arg_value
     f.close()
 
 

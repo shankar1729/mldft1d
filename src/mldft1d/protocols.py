@@ -21,14 +21,11 @@ class DFT(Protocol):
 
     mu: float  #: Chemical potential
     V: qp.grid.FieldR  #: External potential
+    n: qp.grid.FieldR  #: Equlibrium density, available after `minimize`
     energy: qp.Energy  #: Equilibrium energy components, available after `minimize`
 
     def minimize(self) -> qp.Energy:
         """Solve Euler-Lagrange equation and return equilibrium energy."""
-
-    @property
-    def n(self) -> qp.grid.FieldR:
-        """Equilibrium density, which should be available after `minimize`."""
 
 
 def get_mu(functionals: Sequence[Functional], n_bulk: float) -> float:
