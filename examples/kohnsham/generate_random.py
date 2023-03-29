@@ -8,7 +8,7 @@ qp.log.info("Using QimPy " + qp.__version__)
 qp.rc.init()
 
 batch(
-    n_batch=10,
+    n_batch=1000,
     prefix="random_data/random",
     functional="kohnsham",
     L=Choice(np.arange(2.0, 10.0, 0.1)),

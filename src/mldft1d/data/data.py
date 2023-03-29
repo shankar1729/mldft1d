@@ -14,7 +14,7 @@ class Data:
     grid1d: Grid1D
     n_perturbations: int
     E: torch.Tensor
-    V: qp.grid.FieldR
+    V_minus_mu: qp.grid.FieldR
     n: qp.grid.FieldR
     attrs: dict[str, float]
 
@@ -23,7 +23,8 @@ class Data:
         f = File(filename, "r")
         z = torch.tensor(f["z"], device=qp.rc.device)
         lbda = torch.tensor(f["lbda"], device=qp.rc.device)
-        V = torch.outer(lbda, torch.tensor(f["V"], device=qp.rc.device))
+        mu = float(f.attrs["mu"])
+        V_minus_mu = torch.outer(lbda, torch.tensor(f["V"], device=qp.rc.device)) - mu
         n = torch.tensor(np.array(f["n"]), device=qp.rc.device)
         self.n_perturbations = len(lbda)
         self.E = torch.tensor(f["E"], device=qp.rc.device)
@@ -31,7 +32,8 @@ class Data:
         # Read scalar attributes:
         self.attrs = dict()
         for key in f.attrs:
-            self.attrs[key] = float(f.attrs[key])
+            if key not in {"n_bulk", "mu"}:  # n_bulk and mu captured in V - mu
+                self.attrs[key] = float(f.attrs[key])
 
         # Create grid:
         dz = (z[1] - z[0]).item()
@@ -40,7 +42,9 @@ class Data:
         assert len(z) == self.grid1d.z.shape[2]
 
         # Create fieldR's for n and V:
-        self.V = qp.grid.FieldR(self.grid1d.grid, data=V[:, None, None, :])
+        self.V_minus_mu = qp.grid.FieldR(
+            self.grid1d.grid, data=V_minus_mu[:, None, None, :]
+        )
         self.n = qp.grid.FieldR(self.grid1d.grid, data=n[:, None, None, :])
 
     def __repr__(self) -> str:
@@ -72,8 +76,9 @@ def fuse_data(data_arr: Sequence[Data]) -> List[Data]:
         combined = copy.copy(same_grid[0])
         combined.n_perturbations = sum(data.n_perturbations for data in same_grid)
         combined.E = torch.cat([data.E for data in same_grid])
-        combined.V = qp.grid.FieldR(
-            ref_grid1d.grid, data=torch.cat([data.V.data for data in same_grid], dim=0)
+        combined.V_minus_mu = qp.grid.FieldR(
+            ref_grid1d.grid,
+            data=torch.cat([data.V_minus_mu.data for data in same_grid], dim=0),
         )
         combined.n = qp.grid.FieldR(
             ref_grid1d.grid, data=torch.cat([data.n.data for data in same_grid], dim=0)
