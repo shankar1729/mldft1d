@@ -13,7 +13,7 @@ train:
   save-file: params.dat
   save-interval: 30
   epochs: 3000
-  batch-size: 10
+  batch-size: 200
   method: Adam
   lr: 1.0E-3
   weight-decay: 0.01
