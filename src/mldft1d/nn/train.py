@@ -2,7 +2,6 @@ from __future__ import annotations
 import sys
 import glob
 import torch
-import itertools
 import numpy as np
 import qimpy as qp
 from ..data import Data, random_split, random_batch_split, random_mpi_split, fuse_data
@@ -57,19 +56,6 @@ class Trainer(torch.nn.Module):  # type: ignore
 
         report("Training", self.data_train, self.n_train_tot)
         report("Testing", self.data_test, self.n_test_tot)
-
-        # Check data consistency:
-        def get_min_max(attr_name: str) -> tuple[float, float]:
-            data_all = itertools.chain(self.data_train, self.data_test)
-            x = [getattr(data, attr_name) for data in data_all]
-            x_min = comm.allreduce(min(x), MPI.MIN)
-            x_max = comm.allreduce(max(x), MPI.MAX)
-            return x_min, x_max
-
-        Tmin, Tmax = get_min_max("T")
-        Rmin, Rmax = get_min_max("R")
-        assert Tmin == Tmax == functional.T
-        assert Rmin == Rmax
 
     def forward(self, data: Data) -> torch.Tensor:
         """Compute loss function for one complete perturbation data-set"""

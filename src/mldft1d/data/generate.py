@@ -3,7 +3,8 @@ import numpy as np
 from .. import Grid1D, get1D
 from . import v_shape
 from .. import hardrods, kohnsham, protocols
-from typing import Callable
+from typing import Callable, Protocol, Optional, Any
+from dataclasses import dataclass
 import h5py
 import sys
 
@@ -54,6 +55,7 @@ def run(
     f["lbda"] = lbda_arr
     f["n"] = n
     f["E"] = E
+    f.attrs["mu"] = dft.mu
     f.attrs["n_bulk"] = n_bulk
     for dft_arg_name, dft_arg_value in dft_kwargs.items():
         f.attrs[dft_arg_name] = dft_arg_value
@@ -63,6 +65,50 @@ def run(
 def get_lbda_arr(*, min: float, max: float, step: float) -> np.ndarray:
     n_lbda = int(np.round((max - min) / step))
     return min + step * np.arange(n_lbda + 1)
+
+
+class Sampler(Protocol):
+    """Random sampler for batched-data generation.
+    Compatibly with scipy.stats distributions."""
+
+    def rvs(self) -> float:
+        ...
+
+
+@dataclass
+class Choice:
+    """Random choice from a sequence of variables."""
+
+    choices: np.ndarray
+    probabilities: Optional[np.ndarray] = None
+
+    def rvs(self) -> float:
+        return np.random.choice(self.choices, p=self.probabilities, replace=True)
+
+
+def batch(n_batch: int, prefix: str, **kwargs) -> None:
+    """Batched data generation.
+    Call `run` n_batch times and write output to `prefix``i_batch`.h5.
+    Every argument with `kwargs` that is an object with an `rvs` method
+    will be sampled, while everything else will be forwarded to `run`
+    """
+    for i_batch in range(1, n_batch + 1):
+        qp.log.info(f"\n---- Generating {i_batch} of {n_batch} ----\n")
+        sampled_args = sample_dict(kwargs)
+        run(filename=f"{prefix}{i_batch}.h5", **sampled_args)
+
+
+def sample_dict(d: dict[str, Any]) -> dict[str, Any]:
+    """Recursively sample Sampler objects within a dictionary."""
+    output: dict[str, Any] = {}
+    for key, value in d.items():
+        if isinstance(value, dict):
+            output[key] = sample_dict(value)
+        elif hasattr(value, "rvs"):
+            output[key] = value.rvs()
+        else:
+            output[key] = value
+    return output
 
 
 def main() -> None:

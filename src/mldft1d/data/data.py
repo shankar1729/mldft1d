@@ -14,11 +14,9 @@ class Data:
     grid1d: Grid1D
     n_perturbations: int
     E: torch.Tensor
-    n_bulk: float
-    T: float
-    R: float
     V: qp.grid.FieldR
     n: qp.grid.FieldR
+    attrs: dict[str, float]
 
     def __init__(self, filename: str) -> None:
         """Load ML-CDFT training data from HDF5 file `filename`."""
@@ -29,9 +27,11 @@ class Data:
         n = torch.tensor(np.array(f["n"]), device=qp.rc.device)
         self.n_perturbations = len(lbda)
         self.E = torch.tensor(f["E"], device=qp.rc.device)
-        self.n_bulk = float(f.attrs["n_bulk"])
-        self.T = float(f.attrs["T"])
-        self.R = float(f.attrs["R"])
+
+        # Read scalar attributes:
+        self.attrs = dict()
+        for key in f.attrs:
+            self.attrs[key] = float(f.attrs[key])
 
         # Create grid:
         dz = (z[1] - z[0]).item()
@@ -44,28 +44,26 @@ class Data:
         self.n = qp.grid.FieldR(self.grid1d.grid, data=n[:, None, None, :])
 
     def __repr__(self) -> str:
-        return (
-            "hardrods1d.Data("
-            f"T={self.T}, R={self.R}, n_bulk={self.n_bulk}, L={self.grid1d.L:.2f}, "
-            f"n_perturbations={self.n_perturbations}"
-            ")"
-        )
+        attrs = self.attrs
+        L = self.grid1d.L
+        n_perturbations = self.n_perturbations
+        return f"hardrods1d.Data({L=:.2f}, {n_perturbations=}, {attrs=})"
 
 
 def fuse_data(data_arr: Sequence[Data]) -> List[Data]:
-    """Fuse entries with same grid and n_bulk into concatenated entries."""
+    """Fuse entries with same grid and attrs into concatenated entries."""
     result = []
     remainder = data_arr
     while remainder:
         # Find entries with same grid and n_bulk as first one:
         ref_grid1d = remainder[0].grid1d
-        ref_n_bulk = remainder[0].n_bulk
+        ref_attrs = remainder[0].attrs
         same_grid: List[Data] = []
         next_remainder: List[Data] = []
         for data in remainder:
             (
                 same_grid
-                if ((data.grid1d is ref_grid1d) and (data.n_bulk == ref_n_bulk))
+                if ((data.grid1d is ref_grid1d) and (data.attrs == ref_attrs))
                 else next_remainder
             ).append(data)
         remainder = next_remainder
