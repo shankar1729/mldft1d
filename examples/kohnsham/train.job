@@ -7,4 +7,4 @@ export OMPI_OPTIONS="--mca btl ^openib --mca mtl psm2 --mca btl_smcuda_use_cuda_
 module load openmpi-gpu
 module load venv/qimpy
 
-mpirun $OMPI_OPTIONS python trainer.py train.yaml
+mpirun $OMPI_OPTIONS python -m mldft1d.nn.train train.yaml
