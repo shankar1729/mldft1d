@@ -18,5 +18,5 @@ train:
   epochs: 3000
   batch-size: 400
   method: Adam
-  lr: 1.0E-3
+  lr: 1.0E-2
   weight-decay: 1.0E-2

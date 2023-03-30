@@ -78,7 +78,7 @@ class Trainer(torch.nn.Module):  # type: ignore
         # TODO: systematically add known functional pieces (eg. IdealGas for hard rods)
         E = self.functional.get_energy(data.n) + (data.V_minus_mu ^ data.n)
         Verr = torch.autograd.grad(E.sum(), data.n.data, create_graph=True)[0]
-        return Verr.square().sum()  # converted to mean-squared error over batch
+        return (Verr.square() * data.n.data).sum()  # n-weighted MSE loss
 
     def train_loop(self, optimizer: torch.optim.Optimizer, batch_size: int) -> float:
         """Run training loop and return mean loss (over epoch)."""
