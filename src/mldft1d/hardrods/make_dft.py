@@ -1,5 +1,5 @@
 from .. import Grid1D, Minimizer, protocols, nn
-from . import IdealGas, FMT
+from . import IdealGas, FMT, BulkHardRods
 import qimpy as qp
 
 
@@ -13,10 +13,17 @@ def exact(*, grid1d: Grid1D, n_bulk: float, T: float, R: float) -> protocols.DFT
     )
 
 
-def ml(*, grid1d: Grid1D, n_bulk: float, T: float, load_file: str) -> protocols.DFT:
+def ml(
+    *, grid1d: Grid1D, n_bulk: float, T: float, R: float, load_file: str
+) -> protocols.DFT:
     """Make hard-rods approximate DFT using an ML excess functional."""
     return Minimizer(
-        functionals=(IdealGas(T), nn.Functional.load(qp.rc.comm, load_file=load_file)),
+        functionals=(
+            IdealGas(T),
+            nn.Functional.load(
+                qp.rc.comm, load_file=load_file, f_bulk=BulkHardRods(R=R, T=T)
+            ),
+        ),
         grid1d=grid1d,
         n_bulk=n_bulk,
         name="MLCDFT",

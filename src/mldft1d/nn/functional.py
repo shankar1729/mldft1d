@@ -5,18 +5,17 @@ import torch
 import os
 import functools
 from mpi4py import MPI
-from typing import TypeVar, Protocol
+from typing import Protocol
 from .function import Function
-
-
-NNInput = TypeVar("NNInput", torch.Tensor, qp.grid.FieldR)
+from .. import protocols
 
 
 class Functional(torch.nn.Module):  # type: ignore
     """Machine-learned DFT in 1D."""
 
     w: Function  #: Weight functions defining spatial nonlocality
-    f_ex: Function  #: Free energy density as a function of weighted densities
+    f_scale: Function  #: Inhomogeneous scaling function of weighted densities
+    f_bulk: protocols.FunctionBulk  #: Bulk free-energy function
     rc: float  #: If nonzero, compute weight function in real space with this cutoff
 
     def __init__(
@@ -25,13 +24,15 @@ class Functional(torch.nn.Module):  # type: ignore
         *,
         n_weights: int,
         w_hidden_sizes: list[int],
-        f_ex_hidden_sizes: list[int],
+        f_scale_hidden_sizes: list[int],
+        f_bulk: protocols.FunctionBulk,
         rc: float = 0.0,
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
         self.w = Function(1, n_weights, w_hidden_sizes)
-        self.f_ex = Function(n_weights, n_weights, f_ex_hidden_sizes)
+        self.f_scale = Function(n_weights, 1, f_scale_hidden_sizes)
+        self.f_bulk = f_bulk
         self.rc = rc
         if comm.size > 1:
             self.bcast_parameters(comm)
@@ -41,12 +42,14 @@ class Functional(torch.nn.Module):  # type: ignore
         cls,
         comm: MPI.Comm,
         *,
+        f_bulk: protocols.FunctionBulk,
         load_file: str = "",
         **kwargs,
     ) -> Functional:
         """
         Initialize functional from `kwargs` or from params file if given `load_file`.
         Any parameter in `kwargs` must be consistent with the params file, if given.
+        The bulk free energy function `f_bulk` must always be specified explicitly.
         """
         params = dict(**kwargs)
         state = {}
@@ -57,15 +60,15 @@ class Functional(torch.nn.Module):  # type: ignore
             for key, value in params_in.items():
                 if key == "state":
                     state = value
-                elif key == "T":  # ignore T if present (TODO: remove shortly)
-                    pass  # temporary hack for compatibility with old params files
+                elif key == "f_bulk":
+                    assert value == f_bulk.__class__.__name__
                 elif key in params:
                     assert params[key] == value
                 else:
                     params[key] = value
 
         # Create functional and load state if available:
-        functional = Functional(comm, **params)
+        functional = Functional(comm, f_bulk=f_bulk, **params)
         if state:
             functional.load_state_dict(state)
         return functional
@@ -75,7 +78,8 @@ class Functional(torch.nn.Module):  # type: ignore
         params = dict(
             n_weights=self.w.n_out,
             w_hidden_sizes=self.w.n_hidden,
-            f_ex_hidden_sizes=self.f_ex.n_hidden,
+            f_scale_hidden_sizes=self.f_scale.n_hidden,
+            f_bulk=self.f_bulk.__class__.__name__,
             rc=self.rc,
             state=self.state_dict(),
         )
@@ -86,24 +90,18 @@ class Functional(torch.nn.Module):  # type: ignore
         """Compute weights for specified grid and total dimension count."""
         return get_weight_calculator(grid, self.rc)(self.w, n_dim_tot)
 
-    def get_f_ex(self, n: NNInput) -> NNInput:
-        if isinstance(n, torch.Tensor):
-            n_zero = torch.zeros(
-                (self.f_ex.n_in,) + (1,) * (len(n.shape) - 1), device=n.device
-            )
-            return self.f_ex(n) - self.f_ex(n_zero)
-        else:
-            return qp.grid.FieldR(n.grid, data=self.get_f_ex(n.data))
-
     def get_energy(self, n: qp.grid.FieldR) -> torch.Tensor:
         w_tilde = self.get_w_tilde(n.grid, len(n.data.shape) + 1)
-        n_bar = n[None, ...].convolve(w_tilde)
-        return (n_bar ^ self.get_f_ex(n_bar)).sum(dim=0)  # Excess
+        n_bar = n[None, ...].convolve(w_tilde).data
+        # TODO: odd and even weights
+        n0 = n_bar[0]  # first weighted density alone,
+        n0_rep = n0.expand(n_bar.shape)  # expanded to match dimension of all
+        f = self.f_bulk.get_energy_bulk(n0)  # LDA-like (but with a weighted density)
+        f *= (1.0 + self.f_scale(n_bar) - self.f_scale(n0_rep))[0]  # Enhancement factor
+        return qp.grid.FieldR(n.grid, data=f).integral()
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
-        """Compute bulk energy density."""
-        n_bar = n.repeat(self.w.n_out)
-        return n_bar @ self.get_f_ex(n_bar)
+        return self.f_bulk.get_energy_bulk(n)
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:
         """Broadcast i.e. synchronize module parameters over `comm`."""

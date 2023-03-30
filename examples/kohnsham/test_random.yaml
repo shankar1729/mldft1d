@@ -1,6 +1,5 @@
 L: 20.0
 dz: 0.05
-T: 0.01  # Fermi smearing width
 n_bulk: 0.6
 
 Vshape:
@@ -11,4 +10,9 @@ Vshape:
 lbda: 1.0
 
 functionals:
-  electronic: params.dat
+  Exact:
+    kohnsham-exact:
+      T: 0.01  # Fermi smearing width
+  ML:
+    kohnsham-ml:
+      load_file: params.dat

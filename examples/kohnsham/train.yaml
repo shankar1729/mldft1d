@@ -1,7 +1,10 @@
+f_bulk:
+  name: kohnsham
+
 functional:
   n-weights: 10
-  w-hidden-sizes: [30, 30]
-  f-ex-hidden-sizes: [30, 30]
+  w-hidden-sizes: [10, 10, 10]
+  f-scale-hidden-sizes: [10, 10, 10]
   load-file: params.dat
 
 data:
@@ -13,7 +16,7 @@ train:
   save-file: params.dat
   save-interval: 30
   epochs: 3000
-  batch-size: 200
+  batch-size: 400
   method: Adam
   lr: 1.0E-3
-  weight-decay: 0.01
+  weight-decay: 1.0E-2

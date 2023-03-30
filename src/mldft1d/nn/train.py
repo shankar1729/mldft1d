@@ -4,10 +4,18 @@ import glob
 import torch
 import numpy as np
 import qimpy as qp
+from qimpy.utils.dict import key_cleanup
 from ..data import Data, random_split, random_batch_split, random_mpi_split, fuse_data
 from ..nn import Functional
+from .. import protocols, hardrods, kohnsham
 from mpi4py import MPI
 from typing import Sequence, Iterable, Union
+
+
+f_bulk_map: dict[str, type] = {
+    "hardrods": hardrods.BulkHardRods,
+    "kohnsham": kohnsham.ThomasFermi,
+}  #: Recognized bulk functions usable for training
 
 
 class Trainer(torch.nn.Module):  # type: ignore
@@ -129,7 +137,7 @@ def get_optimizer(
 ) -> torch.optim.Optimizer:
     qp.log.info(f"\nCreating {method} optimizer with {method_kwargs}")
     Optimizer = getattr(torch.optim, method)  # select optimizer class
-    return Optimizer(params, **qp.utils.dict.key_cleanup(method_kwargs))
+    return Optimizer(params, **key_cleanup(method_kwargs))
 
 
 def run_training_loop(
@@ -167,9 +175,15 @@ def run_training_loop(
     qp.log.info("Done!")
 
 
+def get_f_bulk(name: str, **kwargs) -> protocols.FunctionBulk:
+    """Get bulk free energy function from YAML input."""
+    return f_bulk_map[name](**kwargs)
+
+
 def run(
     comm: MPI.Comm,
     *,
+    f_bulk: dict,
     functional: dict,
     data: dict,
     train: dict,
@@ -177,10 +191,12 @@ def run(
     torch.random.manual_seed(0)
     trainer = load_data(
         comm,
-        Functional.load(comm, **qp.utils.dict.key_cleanup(functional)),
-        **qp.utils.dict.key_cleanup(data),
+        Functional.load(
+            comm, f_bulk=get_f_bulk(**key_cleanup(f_bulk)), **key_cleanup(functional)
+        ),
+        **key_cleanup(data),
     )
-    run_training_loop(trainer, **qp.utils.dict.key_cleanup(train))
+    run_training_loop(trainer, **key_cleanup(train))
 
 
 def main() -> None:
@@ -193,7 +209,7 @@ def main() -> None:
     qp.log.info("Using QimPy " + qp.__version__)
     qp.rc.init()
 
-    input_dict = qp.utils.dict.key_cleanup(qp.utils.yaml.load(in_file))
+    input_dict = key_cleanup(qp.utils.yaml.load(in_file))
     run(qp.rc.comm, **input_dict)
 
 
