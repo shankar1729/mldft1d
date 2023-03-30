@@ -1,7 +1,7 @@
 functional:
   n-weights: 10
-  w-hidden-sizes: [10, 10]
-  f-ex-hidden-sizes: [10, 10]
+  w-hidden-sizes: [30, 30]
+  f-ex-hidden-sizes: [30, 30]
   load-file: params.dat
 
 data:

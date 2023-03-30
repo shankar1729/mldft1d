@@ -97,8 +97,5 @@ class ThomasFermi:
     def __init__(self):
         self.prefactor = (np.pi**2) / 24
 
-    def get_energy(self, n: qp.grid.FieldR) -> torch.Tensor:
-        return self.prefactor * (n ^ (n * n))
-
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
         return self.prefactor * (n**3)
