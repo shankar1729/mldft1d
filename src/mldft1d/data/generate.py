@@ -95,7 +95,10 @@ def batch(n_batch: int, prefix: str, **kwargs) -> None:
     for i_batch in range(1, n_batch + 1):
         qp.log.info(f"\n---- Generating {i_batch} of {n_batch} ----\n")
         sampled_args = sample_dict(kwargs)
-        run(filename=f"{prefix}{i_batch}.h5", **sampled_args)
+        try:
+            run(filename=f"{prefix}{i_batch}.h5", **sampled_args)
+        except Exception as err:
+            qp.log.error(f"Failed with exception {err}")
 
 
 def sample_dict(d: dict[str, Any]) -> dict[str, Any]:

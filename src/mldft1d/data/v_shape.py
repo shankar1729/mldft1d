@@ -41,8 +41,8 @@ def _get_random(grid1d: Grid1D, *, sigma: float, seed: int) -> torch.Tensor:
     Gnoise[is_real] = Gnoise[is_real].real.to(torch.complex128)
     Gnoise[iGz == 0] = 0.0  # set average to zero
     # Filter and normalize:
-    Gnoise *= np.exp(-0.5 * (Gmag * sigma).square())
-    Gnoise *= np.sqrt(1.0 / (qp.utils.abs_squared(Gnoise) * Gweight).sum())
+    Gnoise *= (-0.5 * (Gmag * sigma).square()).exp()
+    Gnoise *= (1.0 / (qp.utils.abs_squared(Gnoise) * Gweight).sum()).sqrt()
     return Gnoise
 
 
