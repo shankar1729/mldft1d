@@ -1,8 +1,10 @@
 import os
 import sys
 import qimpy as qp
+import torch
 from . import Grid1D, get1D, Minimizer, protocols, hardrods, kohnsham
 from .data import v_shape
+from .kohnsham import Schrodinger, ThomasFermi
 from typing import Callable
 import matplotlib.pyplot as plt
 
@@ -44,8 +46,8 @@ def run(
             dft.finite_difference_test(dft.random_direction())
         dft.minimize()  # equilibrium results in dft.energy and dft.n
 
-    # Plot density and potential:
     if qp.rc.is_head:
+        # Plot density and potential:
         plt.figure(1, figsize=(10, 6))
         z1d = get1D(grid1d.z)
         plt.plot(z1d, get1D(V.data), label="$V$")
@@ -58,6 +60,24 @@ def run(
         plt.xlabel("z")
         plt.legend()
         plt.savefig(f"{run_name}.pdf", bbox_inches="tight")
+
+        # Compare bulk free energy densities:
+        plt.figure(2)
+        n_bulks = torch.linspace(0.0, 1.0, 101, device=qp.rc.device)
+        for dft_name, dft in dfts.items():
+            if isinstance(dft, Minimizer):
+                f_bulks = dft.functionals[-1].get_energy_bulk(n_bulks)
+            elif isinstance(dft, Schrodinger):
+                f_bulks = ThomasFermi().get_energy_bulk(n_bulks)
+            else:
+                continue
+            plt.plot(
+                n_bulks.detach().to(qp.rc.cpu).numpy(),
+                f_bulks.detach().to(qp.rc.cpu).numpy(),
+                label=dft_name,
+            )
+        plt.legend()
+
         plt.show()
 
 

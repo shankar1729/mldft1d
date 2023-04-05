@@ -89,8 +89,8 @@ class Functional(torch.nn.Module):  # type: ignore
         return (n_bar ^ f).sum(dim=0)
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
-        n_bar = n.repeat(self.w.n_out)
-        return n_bar @ self.f(n_bar)
+        n_bar = n.expand(self.w.n_out, *((-1,) * len(n.shape)))
+        return (n_bar * self.f(n_bar)).sum(dim=0)
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:
         """Broadcast i.e. synchronize module parameters over `comm`."""
