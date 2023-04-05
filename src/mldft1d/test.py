@@ -2,7 +2,7 @@ import os
 import sys
 import qimpy as qp
 import torch
-from . import Grid1D, get1D, Minimizer, protocols, hardrods, kohnsham
+from . import Grid1D, get1D, Minimizer, protocols, hardrods, kohnsham, nn
 from .data import v_shape
 from .kohnsham import Schrodinger, ThomasFermi
 from typing import Callable
@@ -77,6 +77,17 @@ def run(
                 label=dft_name,
             )
         plt.legend()
+
+        # Visualize weight functions:
+        for dft_name, dft in dfts.items():
+            if isinstance(dft, Minimizer):
+                if isinstance((functional := dft.functionals[-1]), nn.Functional):
+                    plt.figure()
+                    w_tilde = functional.get_w_tilde(grid1d.grid, n_dim_tot=4)
+                    w = torch.fft.irfft(w_tilde) / dz
+                    print(w.shape)
+                    for iw, wi in enumerate(w.detach()):
+                        plt.plot(z1d, get1D(wi), label=f"Weight {iw}")
 
         plt.show()
 
