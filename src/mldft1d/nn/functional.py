@@ -5,7 +5,7 @@ import torch
 import os
 import functools
 from mpi4py import MPI
-from typing import Protocol
+from typing import Protocol, Optional
 from .function import Function
 
 
@@ -15,6 +15,7 @@ class Functional(torch.nn.Module):  # type: ignore
     w: Function  #: Weight functions defining spatial nonlocality
     f: Function  #: Per-particle free energy function of weighted densities
     rc: float  #: If nonzero, compute weight function in real space with this cutoff
+    Gc: float  #: If nonzero, smoothly cutoff reciprocal space w beyond Gc (in a0^-1)
 
     def __init__(
         self,
@@ -24,12 +25,14 @@ class Functional(torch.nn.Module):  # type: ignore
         w_hidden_sizes: list[int],
         f_hidden_sizes: list[int],
         rc: float = 0.0,
+        Gc: float = 0.0,
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
         self.w = Function(1, n_weights, w_hidden_sizes)
         self.f = Function(n_weights, n_weights, f_hidden_sizes)
         self.rc = rc
+        self.Gc = Gc
         if comm.size > 1:
             self.bcast_parameters(comm)
 
@@ -72,6 +75,7 @@ class Functional(torch.nn.Module):  # type: ignore
             w_hidden_sizes=self.w.n_hidden,
             f_hidden_sizes=self.f.n_hidden,
             rc=self.rc,
+            Gc=self.Gc,
             state=self.state_dict(),
         )
         if comm.rank == 0:
@@ -79,7 +83,7 @@ class Functional(torch.nn.Module):  # type: ignore
 
     def get_w_tilde(self, grid: qp.grid.Grid, n_dim_tot: int) -> torch.Tensor:
         """Compute weights for specified grid and total dimension count."""
-        return get_weight_calculator(grid, self.rc)(self.w, n_dim_tot)
+        return get_weight_calculator(grid, self.rc, self.Gc)(self.w, n_dim_tot)
 
     def get_energy(self, n: qp.grid.FieldR) -> torch.Tensor:
         w_tilde = self.get_w_tilde(n.grid, len(n.data.shape) + 1)
@@ -113,27 +117,37 @@ class WeightCalculator(Protocol):
 
 
 @functools.lru_cache()
-def get_weight_calculator(grid: qp.grid.Grid, rc: float) -> WeightCalculator:
+def get_weight_calculator(grid: qp.grid.Grid, rc: float, Gc: float) -> WeightCalculator:
     if rc:
         return WeightCalculatorR(grid, rc)
     else:
-        return WeightCalculatorG(grid)
+        return WeightCalculatorG(grid, Gc)
 
 
 class WeightCalculatorG:
     """Reciprocal-space weight calculator."""
 
     Gmag: torch.Tensor  #: reciprocal lattice vector magnitudes
+    cutoff: Optional[torch.Tensor]  #: optional reciprocal space cutoff (if non-zero)
 
-    def __init__(self, grid: qp.grid.Grid) -> None:
+    def __init__(self, grid: qp.grid.Grid, Gc: float) -> None:
         iG = grid.get_mesh("H").to(torch.double)  # half-space
         self.Gmag = (iG @ grid.lattice.Gbasis.T).norm(dim=-1)
+        self.cutoff = None
+        if Gc:
+            self.cutoff = torch.zeros_like(self.Gmag)
+            sel = torch.where(self.Gmag < Gc)
+            self.cutoff[sel] = ((self.Gmag[sel] * (np.pi / Gc)).cos() + 1.0) * 0.5
 
     def __call__(self, w: Function, n_dim_tot: int) -> torch.Tensor:
         bcast_shape = (1,) * (n_dim_tot - 3) + self.Gmag.shape
         w_tilde = w(self.Gmag.view(bcast_shape))
         w_zero = w_tilde[..., :1]  # G = 0 component of w_tilde (with same dimensions)
-        return w_tilde - (w_zero - 1.0)  # Return weight with w(0) constrained to 1
+        result = w_tilde - (w_zero - 1.0)  # Constrain w(0) to 1
+        if self.cutoff is not None:
+            return result * self.cutoff.view(bcast_shape)
+        else:
+            return result
 
 
 class WeightCalculatorR:

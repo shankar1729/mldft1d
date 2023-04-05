@@ -76,6 +76,8 @@ def run(
                 f_bulks.detach().to(qp.rc.cpu).numpy(),
                 label=dft_name,
             )
+        plt.xlabel(r"$n_{\mathrm{bulk}}$")
+        plt.ylabel("Free-energy density")
         plt.legend()
 
         # Visualize weight functions:
@@ -84,10 +86,13 @@ def run(
                 if isinstance((functional := dft.functionals[-1]), nn.Functional):
                     plt.figure()
                     w_tilde = functional.get_w_tilde(grid1d.grid, n_dim_tot=4)
-                    w = torch.fft.irfft(w_tilde) / dz
-                    print(w.shape)
+                    w = torch.fft.irfft(w_tilde).real / dz
                     for iw, wi in enumerate(w.detach()):
                         plt.plot(z1d, get1D(wi), label=f"Weight {iw}")
+                    plt.xlim(0, 0.5 * L)
+                    plt.xlabel("$z$")
+                    plt.ylabel("$w(z)$")
+                    plt.title(f"Weight functions for {dft_name}")
 
         plt.show()
 
