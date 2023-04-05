@@ -32,7 +32,7 @@ def plot_data(data_file: str) -> None:
     # --- add colorbar
     sm = mpl.cm.ScalarMappable(cmap=cmap, norm=normalize)
     sm.set_array([])
-    plt.colorbar(sm, label=r"Perturbation strength, $\lambda$")
+    plt.colorbar(sm, label=r"Perturbation strength, $\lambda$", ax=plt.gca())
 
     if len(lbda) > 1:
         # Compare exact and thermodynamically-integrated energies:

@@ -7,15 +7,8 @@ import qimpy as qp
 from qimpy.utils.dict import key_cleanup
 from ..data import Data, random_split, random_batch_split, random_mpi_split, fuse_data
 from ..nn import Functional
-from .. import protocols, hardrods, kohnsham
 from mpi4py import MPI
 from typing import Sequence, Iterable, Union
-
-
-f_bulk_map: dict[str, type] = {
-    "hardrods": hardrods.BulkHardRods,
-    "kohnsham": kohnsham.ThomasFermi,
-}  #: Recognized bulk functions usable for training
 
 
 class Trainer(torch.nn.Module):  # type: ignore
@@ -78,7 +71,7 @@ class Trainer(torch.nn.Module):  # type: ignore
         # TODO: systematically add known functional pieces (eg. IdealGas for hard rods)
         E = self.functional.get_energy(data.n) + (data.V_minus_mu ^ data.n)
         Verr = torch.autograd.grad(E.sum(), data.n.data, create_graph=True)[0]
-        return (Verr.square() * data.n.data).sum()  # n-weighted MSE loss
+        return Verr.square().sum()  # converted to MSE loss over epoch below
 
     def train_loop(self, optimizer: torch.optim.Optimizer, batch_size: int) -> float:
         """Run training loop and return mean loss (over epoch)."""
@@ -175,26 +168,16 @@ def run_training_loop(
     qp.log.info("Done!")
 
 
-def get_f_bulk(name: str, **kwargs) -> protocols.FunctionBulk:
-    """Get bulk free energy function from YAML input."""
-    return f_bulk_map[name](**kwargs)
-
-
 def run(
     comm: MPI.Comm,
     *,
-    f_bulk: dict,
     functional: dict,
     data: dict,
     train: dict,
 ) -> None:
     torch.random.manual_seed(0)
     trainer = load_data(
-        comm,
-        Functional.load(
-            comm, f_bulk=get_f_bulk(**key_cleanup(f_bulk)), **key_cleanup(functional)
-        ),
-        **key_cleanup(data),
+        comm, Functional.load(comm, **key_cleanup(functional)), **key_cleanup(data)
     )
     run_training_loop(trainer, **key_cleanup(train))
 

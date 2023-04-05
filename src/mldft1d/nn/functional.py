@@ -7,15 +7,13 @@ import functools
 from mpi4py import MPI
 from typing import Protocol
 from .function import Function
-from .. import protocols
 
 
 class Functional(torch.nn.Module):  # type: ignore
     """Machine-learned DFT in 1D."""
 
     w: Function  #: Weight functions defining spatial nonlocality
-    f_scale: Function  #: Inhomogeneous scaling function of weighted densities
-    f_bulk: protocols.FunctionBulk  #: Bulk free-energy function
+    f: Function  #: Per-particle free energy function of weighted densities
     rc: float  #: If nonzero, compute weight function in real space with this cutoff
 
     def __init__(
@@ -24,15 +22,13 @@ class Functional(torch.nn.Module):  # type: ignore
         *,
         n_weights: int,
         w_hidden_sizes: list[int],
-        f_scale_hidden_sizes: list[int],
-        f_bulk: protocols.FunctionBulk,
+        f_hidden_sizes: list[int],
         rc: float = 0.0,
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
         self.w = Function(1, n_weights, w_hidden_sizes)
-        self.f_scale = Function(n_weights, 1, f_scale_hidden_sizes)
-        self.f_bulk = f_bulk
+        self.f = Function(n_weights, n_weights, f_hidden_sizes)
         self.rc = rc
         if comm.size > 1:
             self.bcast_parameters(comm)
@@ -42,14 +38,12 @@ class Functional(torch.nn.Module):  # type: ignore
         cls,
         comm: MPI.Comm,
         *,
-        f_bulk: protocols.FunctionBulk,
         load_file: str = "",
         **kwargs,
     ) -> Functional:
         """
         Initialize functional from `kwargs` or from params file if given `load_file`.
         Any parameter in `kwargs` must be consistent with the params file, if given.
-        The bulk free energy function `f_bulk` must always be specified explicitly.
         """
         params = dict(**kwargs)
         state = {}
@@ -60,15 +54,13 @@ class Functional(torch.nn.Module):  # type: ignore
             for key, value in params_in.items():
                 if key == "state":
                     state = value
-                elif key == "f_bulk":
-                    assert value == f_bulk.__class__.__name__
                 elif key in params:
                     assert params[key] == value
                 else:
                     params[key] = value
 
         # Create functional and load state if available:
-        functional = Functional(comm, f_bulk=f_bulk, **params)
+        functional = Functional(comm, **params)
         if state:
             functional.load_state_dict(state)
         return functional
@@ -78,8 +70,7 @@ class Functional(torch.nn.Module):  # type: ignore
         params = dict(
             n_weights=self.w.n_out,
             w_hidden_sizes=self.w.n_hidden,
-            f_scale_hidden_sizes=self.f_scale.n_hidden,
-            f_bulk=self.f_bulk.__class__.__name__,
+            f_hidden_sizes=self.f.n_hidden,
             rc=self.rc,
             state=self.state_dict(),
         )
@@ -92,16 +83,14 @@ class Functional(torch.nn.Module):  # type: ignore
 
     def get_energy(self, n: qp.grid.FieldR) -> torch.Tensor:
         w_tilde = self.get_w_tilde(n.grid, len(n.data.shape) + 1)
-        n_bar = n[None, ...].convolve(w_tilde).data
+        n_bar = n[None, ...].convolve(w_tilde)
         # TODO: odd and even weights
-        n0 = n_bar[0]  # first weighted density alone,
-        n0_rep = n0.expand(n_bar.shape)  # expanded to match dimension of all
-        f = self.f_bulk.get_energy_bulk(n0)  # LDA-like (but with a weighted density)
-        f *= (1.0 + self.f_scale(n_bar) - self.f_scale(n0_rep))[0]  # Enhancement factor
-        return qp.grid.FieldR(n.grid, data=f).integral()
+        f = qp.grid.FieldR(n.grid, data=self.f(n_bar.data))
+        return (n_bar ^ f).sum(dim=0)
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
-        return self.f_bulk.get_energy_bulk(n)
+        n_bar = n.repeat(self.w.n_out)
+        return n_bar @ self.f(n_bar)
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:
         """Broadcast i.e. synchronize module parameters over `comm`."""

@@ -48,14 +48,14 @@ def run(
     if qp.rc.is_head:
         plt.figure(1, figsize=(10, 6))
         z1d = get1D(grid1d.z)
-        plt.plot(z1d, get1D(V.data) / lbda, label=f"$V/V_0$ (with $V_0 = {lbda}$)")
+        plt.plot(z1d, get1D(V.data), label="$V$")
         for dft_name, dft in dfts.items():
             E = float(dft.energy)
             qp.log.info(f"{dft_name:>14s}:  mu: {dft.mu:>7f}  E: {E:>9f}")
             plt.plot(z1d, get1D(dft.n.data), label=f"$n$ ({dft_name})")
         plt.axhline(n_bulk, color="k", ls="dotted")
+        plt.axhline(0.0, color="k", ls="dotted")
         plt.xlabel("z")
-        plt.ylim(0, None)
         plt.legend()
         plt.savefig(f"{run_name}.pdf", bbox_inches="tight")
         plt.show()
