@@ -1,5 +1,5 @@
 functional:
-  n-weights: 10
+  n-weights: [5, 3]
   w-hidden-sizes: [30, 30]
   f-hidden-sizes: [30, 30]
   load-file: params.dat

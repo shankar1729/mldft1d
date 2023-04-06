@@ -87,8 +87,12 @@ def run(
                     plt.figure()
                     w_tilde = functional.get_w_tilde(grid1d.grid, n_dim_tot=4)
                     w = torch.fft.irfft(w_tilde).real / dz
-                    for iw, wi in enumerate(w.detach()):
-                        plt.plot(z1d, get1D(wi), label=f"Weight {iw}")
+                    for label, style, w_set in zip(
+                        ("Even", "Odd"),
+                        ("r", "b"),
+                        w.detach().to(qp.rc.cpu)[:, 0, 0].split(functional.n_weights),
+                    ):
+                        plt.plot(z1d, w_set.numpy().T, style, label=f"{label} weights")
                     plt.xlim(0, 0.5 * L)
                     plt.xlabel("$z$")
                     plt.ylabel("$w(z)$")

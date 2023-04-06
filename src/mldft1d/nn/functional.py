@@ -12,6 +12,9 @@ from .function import Function
 class Functional(torch.nn.Module):  # type: ignore
     """Machine-learned DFT in 1D."""
 
+    n_weights: tuple[int, int]  #: Number of even and odd weight functions
+    i_odd_pair: torch.Tensor  #: Indices of distinct pairs of odd weighted densities
+    n_irred: int  #: Number of irreducible scalar combinations of weighted densities
     w: Function  #: Weight functions defining spatial nonlocality
     f: Function  #: Per-particle free energy function of weighted densities
     rc: float  #: If nonzero, compute weight function in real space with this cutoff
@@ -21,7 +24,7 @@ class Functional(torch.nn.Module):  # type: ignore
         self,
         comm: MPI.Comm,
         *,
-        n_weights: int,
+        n_weights: tuple[int, int],
         w_hidden_sizes: list[int],
         f_hidden_sizes: list[int],
         rc: float = 0.0,
@@ -29,8 +32,12 @@ class Functional(torch.nn.Module):  # type: ignore
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
-        self.w = Function(1, n_weights, w_hidden_sizes)
-        self.f = Function(n_weights, n_weights, f_hidden_sizes)
+        n_weights_even, n_weights_odd = n_weights
+        self.n_weights = n_weights
+        self.i_odd_pair = get_pair_indices(n_weights_odd)
+        self.n_irred = n_weights_even + len(self.i_odd_pair)
+        self.w = Function(1, sum(n_weights), w_hidden_sizes)
+        self.f = Function(self.n_irred, self.n_irred, f_hidden_sizes)
         self.rc = rc
         self.Gc = Gc
         if comm.size > 1:
@@ -71,7 +78,7 @@ class Functional(torch.nn.Module):  # type: ignore
     def save(self, filename: str, comm: MPI.Comm) -> None:
         """Save parameters to specified filename."""
         params = dict(
-            n_weights=self.w.n_out,
+            n_weights=self.n_weights,
             w_hidden_sizes=self.w.n_hidden,
             f_hidden_sizes=self.f.n_hidden,
             rc=self.rc,
@@ -83,17 +90,27 @@ class Functional(torch.nn.Module):  # type: ignore
 
     def get_w_tilde(self, grid: qp.grid.Grid, n_dim_tot: int) -> torch.Tensor:
         """Compute weights for specified grid and total dimension count."""
-        return get_weight_calculator(grid, self.rc, self.Gc)(self.w, n_dim_tot)
+        calculator = get_weight_calculator(grid, self.rc, self.Gc)
+        w_tilde = calculator(self.w, n_dim_tot).to(torch.complex128)
+        n_weights_even, n_weights_odd = self.n_weights
+        if n_weights_odd:
+            # Multiply gradient operator to make a portion of the weights odd:
+            gradient_z = grid.get_gradient_operator("H")[2]
+            w_tilde[n_weights_even:] *= gradient_z
+        return w_tilde
 
     def get_energy(self, n: qp.grid.FieldR) -> torch.Tensor:
         w_tilde = self.get_w_tilde(n.grid, len(n.data.shape) + 1)
-        n_bar = n[None, ...].convolve(w_tilde)
-        # TODO: odd and even weights
-        f = qp.grid.FieldR(n.grid, data=self.f(n_bar.data))
-        return (n_bar ^ f).sum(dim=0)
+        n_even, n_odd = n[None, ...].convolve(w_tilde).data.split(self.n_weights)
+        n_odd_sq = (n_odd[:, None] * n_odd[None]).flatten(0, 1)[self.i_odd_pair]
+        scalars = qp.grid.FieldR(n.grid, data=torch.cat((n_even, n_odd_sq), dim=0))
+        f = qp.grid.FieldR(n.grid, data=self.f(scalars.data))
+        return (scalars ^ f).sum(dim=0)
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
-        n_bar = n.expand(self.w.n_out, *((-1,) * len(n.shape)))
+        n_weights_even = self.n_weights[0]
+        n_bar = torch.zeros((self.n_irred,) + n.shape, device=n.device, dtype=n.dtype)
+        n_bar[:n_weights_even] = n[None]
         return (n_bar * self.f(n_bar)).sum(dim=0)
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:
@@ -186,3 +203,12 @@ class WeightCalculatorR:
         Nw, Nz = w_tilde.shape
         bcast_shape = (Nw,) + (1,) * (n_dim_tot - 2) + (Nz,)
         return (w_tilde / w_zero).view(bcast_shape)
+
+
+def get_pair_indices(N: int) -> torch.Tensor:
+    """Get indices of distinct unordered pairs (i, j) for i, j in [0, N).
+    The indices are to the flattened array of all pairs, i.e. in [0, N^2),
+    (and will have length N(N+1)/2)."""
+    index = torch.arange(N, dtype=torch.long, device=qp.rc.device)
+    i, j = torch.where(index[:, None] <= index[None, :])
+    return i * N + j
