@@ -177,7 +177,9 @@ def run(
 ) -> None:
     torch.random.manual_seed(0)
     trainer = load_data(
-        comm, Functional.load(comm, **key_cleanup(functional)), **key_cleanup(data)
+        comm,
+        Functional.load(comm, **key_cleanup(functional), cache_w=False),
+        **key_cleanup(data),
     )
     run_training_loop(trainer, **key_cleanup(train))
 
