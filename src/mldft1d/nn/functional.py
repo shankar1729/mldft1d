@@ -1,11 +1,11 @@
 from __future__ import annotations
 import qimpy as qp
+import numpy as np
 import torch
 import os
 from mpi4py import MPI
 from typing import Optional
 from .function import Function
-from .weight_functions import Normalizer
 
 
 class Functional(torch.nn.Module):  # type: ignore
@@ -16,8 +16,8 @@ class Functional(torch.nn.Module):  # type: ignore
     n_irred: int  #: Number of irreducible scalar combinations of weighted densities
     w: Function  #: Weight functions defining spatial nonlocality
     f: Function  #: Per-particle free energy function of weighted densities
+    Gc: float  #: Reciprocal space cutoff on weight functions
     cache_w: bool  #: Whether to precompute weight functions (must be off for training)
-    w_norm: Normalizer  #: Utility to compute orthonormalized weight functions
 
     _cached_w_tilde: dict[qp.grid.Grid, torch.Tensor]  #: cached weight functions
     _cached_w0: Optional[torch.Tensor]  #: cached G=0 component of weights
@@ -29,9 +29,8 @@ class Functional(torch.nn.Module):  # type: ignore
         n_weights: tuple[int, int],
         w_hidden_sizes: list[int],
         f_hidden_sizes: list[int],
+        Gc: float,
         cache_w: bool = True,
-        rc: float = 0.0,
-        Gc: float = 0.0,
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
@@ -41,8 +40,8 @@ class Functional(torch.nn.Module):  # type: ignore
         self.n_irred = n_weights_even + len(self.i_odd_pair)
         self.w = Function(1, sum(n_weights), w_hidden_sizes)
         self.f = Function(self.n_irred, self.n_irred, f_hidden_sizes)
+        self.Gc = Gc
         self.cache_w = cache_w
-        self.w_norm = Normalizer(rc, Gc)
         if comm.size > 1:
             self.bcast_parameters(comm)
         self._cached_w_tilde = dict()
@@ -86,8 +85,7 @@ class Functional(torch.nn.Module):  # type: ignore
             n_weights=self.n_weights,
             w_hidden_sizes=self.w.n_hidden,
             f_hidden_sizes=self.f.n_hidden,
-            rc=self.w_norm.rc,
-            Gc=self.w_norm.Gc,
+            Gc=self.Gc,
             state=self.state_dict(),
         )
         if comm.rank == 0:
@@ -98,9 +96,18 @@ class Functional(torch.nn.Module):  # type: ignore
         if self.cache_w and (grid in self._cached_w_tilde):
             w_tilde = self._cached_w_tilde[grid]
         else:
-            w_tilde = self.w_norm.get_weights(grid, self.w, self.n_weights[0])
+            # Compute weight:
+            gradient_z = grid.get_gradient_operator("H")[2, 0]  # 1 x Nz array
+            g_sq = torch.clamp(qp.utils.abs_squared(gradient_z / self.Gc), max=1.0)
+            w_tilde = self.w(g_sq) * ((np.pi * g_sq).cos() + 1.0) * 0.5
+
+            # Make odd weights:
+            w_tilde = w_tilde.to(torch.complex128)
+            w_tilde[self.n_weights[0] :] *= gradient_z
+
             if self.cache_w:
                 self._cached_w_tilde[grid] = w_tilde.detach()
+
         # Fix broadcast dimensions:
         Nw, Nz = w_tilde.shape
         return w_tilde.view(Nw, *((1,) * (n_dim_tot - 2)), Nz)
@@ -110,7 +117,8 @@ class Functional(torch.nn.Module):  # type: ignore
         if self.cache_w and (self._cached_w0 is not None):
             w0 = self._cached_w0
         else:
-            w0 = self.w_norm.get_weights_Gzero(self.w, self.n_weights[0])
+            Gzero = torch.zeros((1,), device=qp.rc.device)
+            w0 = self.w(Gzero)[: self.n_weights[0]]  # odd weights have G=0 always = 0
             if self.cache_w:
                 self._cached_w0 = w0.detach()
         return w0
@@ -121,6 +129,7 @@ class Functional(torch.nn.Module):  # type: ignore
         n_even, n_odd = n[None, ...].convolve(w_tilde).data.split(self.n_weights)
         n_odd_sq = (n_odd[:, None] * n_odd[None]).flatten(0, 1)[self.i_odd_pair]
         scalars = qp.grid.FieldR(n.grid, data=torch.cat((n_even, n_odd_sq), dim=0))
+
         # Evaluate free energy:
         f = qp.grid.FieldR(n.grid, data=self.f(scalars.data))
         return (scalars ^ f).sum(dim=0)
