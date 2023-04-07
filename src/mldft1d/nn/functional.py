@@ -17,6 +17,7 @@ class Functional(torch.nn.Module):  # type: ignore
     w: Function  #: Weight functions defining spatial nonlocality
     f: Function  #: Per-particle free energy function of weighted densities
     Gc: float  #: Reciprocal space cutoff on weight functions
+    G_sq_power: torch.Tensor  #: Power of G^2 associated with each weight function
     cache_w: bool  #: Whether to precompute weight functions (must be off for training)
 
     _cached_w_tilde: dict[qp.grid.Grid, torch.Tensor]  #: cached weight functions
@@ -41,6 +42,12 @@ class Functional(torch.nn.Module):  # type: ignore
         self.w = Function(1, sum(n_weights), w_hidden_sizes)
         self.f = Function(self.n_irred, self.n_irred, f_hidden_sizes)
         self.Gc = Gc
+        self.G_sq_power = torch.cat(
+            (
+                torch.arange(n_weights_even, dtype=torch.int),
+                torch.arange(n_weights_odd, dtype=torch.int),
+            )
+        ).to(qp.rc.device)[:, None]
         self.cache_w = cache_w
         if comm.size > 1:
             self.bcast_parameters(comm)
@@ -99,7 +106,11 @@ class Functional(torch.nn.Module):  # type: ignore
             # Compute weight:
             gradient_z = grid.get_gradient_operator("H")[2, 0]  # 1 x Nz array
             g_sq = torch.clamp(qp.utils.abs_squared(gradient_z / self.Gc), max=1.0)
-            w_tilde = self.w(g_sq) * ((np.pi * g_sq).cos() + 1.0) * 0.5
+            w_tilde = (
+                self.w(g_sq)  # Neural network part
+                * (((np.pi * g_sq).cos() + 1.0) * 0.5)  # Cutoff at Gc
+                * (g_sq**self.G_sq_power)  # Different G -> 0 power for each weight
+            )
 
             # Make odd weights:
             w_tilde = w_tilde.to(torch.complex128)
@@ -113,12 +124,12 @@ class Functional(torch.nn.Module):  # type: ignore
         return w_tilde.view(Nw, *((1,) * (n_dim_tot - 2)), Nz)
 
     def get_w0(self) -> torch.Tensor:
-        """Get G=0 component of weights."""
+        """Get G=0 component of first weight (rest all zero)."""
         if self.cache_w and (self._cached_w0 is not None):
             w0 = self._cached_w0
         else:
             Gzero = torch.zeros((1,), device=qp.rc.device)
-            w0 = self.w(Gzero)[: self.n_weights[0]]  # odd weights have G=0 always = 0
+            w0 = self.w(Gzero)[0]  # all others have non-zero powers of G
             if self.cache_w:
                 self._cached_w0 = w0.detach()
         return w0
@@ -135,9 +146,8 @@ class Functional(torch.nn.Module):  # type: ignore
         return (scalars ^ f).sum(dim=0)
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
-        w0 = self.get_w0()
         n_bar = torch.zeros((self.n_irred,) + n.shape, device=n.device, dtype=n.dtype)
-        n_bar[: len(w0)] = torch.einsum("w, ... -> w...", w0, n)
+        n_bar[0] = self.get_w0() * n
         return (n_bar * self.f(n_bar)).sum(dim=0)
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:
