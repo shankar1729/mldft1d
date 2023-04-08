@@ -1,9 +1,9 @@
 functional:
-  n-weights: [3, 2]
-  w-hidden-sizes: [30, 30, 30]
-  f-hidden-sizes: [30, 30, 30]
+  n-weights: [5, 3]
+  w-hidden-sizes: [30, 30]
+  f-hidden-sizes: [30, 30]
   load-file: params.dat
-  Gc: 20.0
+  rc: 5.0
 
 data:
   filenames: random_data/*.h5
@@ -17,4 +17,5 @@ train:
   batch-size: 400
   method: Adam
   lr: 1.0E-3
-  weight-decay: 1.0E-2
+  weight-decay: 1.0E-3
+

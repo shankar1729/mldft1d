@@ -14,15 +14,6 @@ functionals:
   Exact:
     hardrods-exact:
       R: 0.5
-  ML-2-10-10:
+  ML:
     hardrods-ml:
-      load_file: train-2-10-10/params.dat
-  2-30-30:
-    hardrods-ml:
-      load_file: train-2-30-30/params.dat
-  2-90-90:
-    hardrods-ml:
-      load_file: train-2-90-90/params.dat
-  2-30-30-30:
-    hardrods-ml:
-      load_file: train-2-30-30/params.dat
+      load_file: params.dat
