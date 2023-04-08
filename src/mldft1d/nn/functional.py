@@ -1,6 +1,5 @@
 from __future__ import annotations
 import qimpy as qp
-import numpy as np
 import torch
 import os
 from mpi4py import MPI
@@ -18,6 +17,7 @@ class Functional(torch.nn.Module):  # type: ignore
     f: Function  #: Per-particle free energy function of weighted densities
     Gc: float  #: Reciprocal space cutoff on weight functions
     G_sq_power: torch.Tensor  #: Power of G^2 associated with each weight function
+    G_sq_norm: torch.Tensor  #: Normalizing factor for spectral power in each weight
     cache_w: bool  #: Whether to precompute weight functions (must be off for training)
 
     _cached_w_tilde: dict[qp.grid.Grid, torch.Tensor]  #: cached weight functions
@@ -48,6 +48,11 @@ class Functional(torch.nn.Module):  # type: ignore
                 torch.arange(n_weights_odd, dtype=torch.int),
             )
         ).to(qp.rc.device)[:, None]
+        G_power = 2 * self.G_sq_power
+        G_power[n_weights_even:] += 1
+        G_norm_terms = 2 * G_power + torch.arange(1, 10, 2, device=qp.rc.device)[None]
+        self.G_sq_norm = (G_norm_terms.prod(dim=1) / 384).sqrt()[:, None]
+        self.G_sq_norm[n_weights_even:] *= 1.0 / Gc
         self.cache_w = cache_w
         if comm.size > 1:
             self.bcast_parameters(comm)
@@ -108,8 +113,9 @@ class Functional(torch.nn.Module):  # type: ignore
             g_sq = torch.clamp(qp.utils.abs_squared(gradient_z / self.Gc), max=1.0)
             w_tilde = (
                 self.w(g_sq)  # Neural network part
-                * (((np.pi * g_sq).cos() + 1.0) * 0.5)  # Cutoff at Gc
+                * (1.0 - g_sq).square()  # Cutoff at Gc
                 * (g_sq**self.G_sq_power)  # Different G -> 0 power for each weight
+                * self.G_sq_norm  # Ensure similar spectral power in each weight
             )
 
             # Make odd weights:
@@ -129,7 +135,7 @@ class Functional(torch.nn.Module):  # type: ignore
             w0 = self._cached_w0
         else:
             Gzero = torch.zeros((1,), device=qp.rc.device)
-            w0 = self.w(Gzero)[0]  # all others have non-zero powers of G
+            w0 = self.w(Gzero)[0] * self.G_sq_norm[0]  # others are zero at G=0
             if self.cache_w:
                 self._cached_w0 = w0.detach()
         return w0
