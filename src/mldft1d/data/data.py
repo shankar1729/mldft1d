@@ -25,6 +25,8 @@ class Data:
         lbda = torch.tensor(f["lbda"], device=qp.rc.device)
         mu = float(f.attrs["mu"])
         V_minus_mu = torch.outer(lbda, torch.tensor(f["V"], device=qp.rc.device)) - mu
+        if "V0" in f:
+            V_minus_mu += torch.tensor(f["V0"], device=qp.rc.device)
         n = torch.tensor(np.array(f["n"]), device=qp.rc.device)
         self.n_perturbations = len(lbda)
         self.E = torch.tensor(f["E"], device=qp.rc.device)

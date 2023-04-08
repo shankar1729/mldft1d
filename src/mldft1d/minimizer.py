@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from .grid1d import Grid1D
 from .protocols import Functional, get_mu
-from typing import Sequence
+from typing import Sequence, Optional
 
 
 class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
@@ -81,3 +81,14 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
     def random_direction(self) -> qp.grid.FieldR:
         grid = self.grid1d.grid
         return qp.grid.FieldR(grid, data=torch.randn(grid.shapeR_mine))
+
+    def known_V(self) -> Optional[qp.grid.FieldR]:
+        """Return potential from all but the last term."""
+        n = self.n
+        n.data.requires_grad = True
+        n.data.grad = None
+        E = torch.tensor(0.0, device=qp.rc.device)
+        for functional in self.functionals[:-1]:
+            E += functional.get_energy(n)
+        (E / n.grid.dV).backward()  # functional derivative -> n.data.grad
+        return qp.grid.FieldR(n.grid, data=n.data.grad)

@@ -7,13 +7,15 @@ import sys
 
 
 def plot_data(data_file: str) -> None:
-    f = h5py.File(data_file, "r")
-    z = np.array(f["z"])
-    V = np.array(f["V"])
-    lbda = np.array(f["lbda"])
-    n = np.array(f["n"])
-    E = np.array(f["E"])
-    n_bulk = f.attrs["n_bulk"]
+    with h5py.File(data_file, "r") as f:
+        z = np.array(f["z"])
+        V = np.array(f["V"])
+        lbda = np.array(f["lbda"])
+        n = np.array(f["n"])
+        E = np.array(f["E"])
+        n_bulk = f.attrs["n_bulk"]
+        mu = f.attrs["mu"]
+        V0 = np.array(f["V0"]) if ("V0" in f) else None
 
     # Plot density profiles and potential:
     plt.figure(1)
@@ -53,6 +55,20 @@ def plot_data(data_file: str) -> None:
         plt.xlim(lbda.min(), lbda.max())
         plt.xlabel(r"Perturbation strength, $V_0$")
         plt.ylabel(r"Free energy change, $\Delta\Phi$")
+
+        # Plot unknown part of potential separately, if applicable:
+        if V0 is not None:
+            plt.figure()
+            for lbda_cur, V0_cur in zip(lbda, V0):
+                V_unknown = mu - lbda_cur * V - V0_cur
+                plt.plot(z, V_unknown, color=cmap(normalize(lbda_cur)), lw=1)
+            plt.xlabel(r"$z$")
+            plt.ylabel(r"$V_{\mathrm{unknown}}(z)$")
+            plt.xlim(z.min(), z.max())
+            # --- add colorbar
+            sm = mpl.cm.ScalarMappable(cmap=cmap, norm=normalize)
+            sm.set_array([])
+            plt.colorbar(sm, label=r"Perturbation strength, $\lambda$", ax=plt.gca())
 
     plt.show()
 

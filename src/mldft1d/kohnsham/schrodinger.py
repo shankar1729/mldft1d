@@ -2,6 +2,7 @@ import qimpy as qp
 import numpy as np
 from .. import Grid1D
 from ..protocols import get_mu
+from typing import Optional
 import torch
 
 
@@ -24,6 +25,9 @@ class Schrodinger:
         self.n = qp.grid.FieldR(grid1d.grid, data=torch.zeros_like(grid1d.z))
         self.V = self.n.zeros_like()
         self.energy = qp.Energy()
+
+    def known_V(self) -> Optional[qp.grid.FieldR]:
+        return None
 
     def minimize(self) -> qp.Energy:
         Nk = 2 * np.ceil(2 * np.pi / (self.grid1d.L * self.T))  # assuming vF ~ 1

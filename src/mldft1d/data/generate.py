@@ -37,6 +37,7 @@ def run(
     lbda_arr = get_lbda_arr(**qp.utils.dict.key_cleanup(lbda))
     E = np.zeros_like(lbda_arr)
     n = np.zeros((len(E), len(get1D(grid1d.z))))
+    V0 = None if (dft.known_V() is None) else np.zeros_like(n)
 
     # Split runs by sign and in increasing order of perturbation strength:
     abs_index = abs(lbda_arr).argsort()
@@ -48,6 +49,10 @@ def run(
             dft.V = lbda_arr[index] * V
             E[index] = float(dft.minimize())
             n[index] = get1D(dft.n.data)
+            if V0 is not None:
+                V0_i = dft.known_V()
+                assert V0_i is not None
+                V0[index] = get1D(V0_i.data)
 
     f = h5py.File(filename, "w")
     f["z"] = get1D(grid1d.z)
@@ -55,6 +60,8 @@ def run(
     f["lbda"] = lbda_arr
     f["n"] = n
     f["E"] = E
+    if V0 is not None:
+        f["V0"] = V0
     f.attrs["mu"] = dft.mu
     f.attrs["n_bulk"] = n_bulk
     for dft_arg_name, dft_arg_value in dft_kwargs.items():

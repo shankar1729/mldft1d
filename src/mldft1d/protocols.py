@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Protocol, Sequence
+from typing import Protocol, Sequence, Optional
 import qimpy as qp
 import torch
 
@@ -30,6 +30,9 @@ class DFT(Protocol):
 
     def minimize(self) -> qp.Energy:
         """Solve Euler-Lagrange equation and return equilibrium energy."""
+
+    def known_V(self) -> Optional[qp.grid.FieldR]:
+        """Return kown part of equilibrium potential eg. ideal gas, if any."""
 
 
 def get_mu(functionals: Sequence[FunctionBulk], n_bulk: float) -> float:
