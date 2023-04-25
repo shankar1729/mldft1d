@@ -1,0 +1,8 @@
+#!/bin/bash
+#SBATCH -N 4 -n 8 -c 8 --hint=nomultithread -o train.log
+
+module load openmpi
+module load venv/qimpy
+
+mpirun --bind-to socket  python -m mldft1d.nn.train train.yaml
+

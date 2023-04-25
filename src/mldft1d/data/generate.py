@@ -27,7 +27,7 @@ def run(
     **dft_kwargs,  #: extra keyword arguments forwarded to the exact dft
 ) -> None:
 
-    grid1d = Grid1D(L=L, dz=dz)
+    grid1d = Grid1D(L=L, dz=dz, parallel=False)
     dft = make_exact_dft_map[functional](grid1d=grid1d, n_bulk=n_bulk, **dft_kwargs)
     n0 = dft.n
 
@@ -99,8 +99,12 @@ def batch(n_batch: int, prefix: str, **kwargs) -> None:
     Every argument with `kwargs` that is an object with an `rvs` method
     will be sampled, while everything else will be forwarded to `run`
     """
-    for i_batch in range(1, n_batch + 1):
-        qp.log.info(f"\n---- Generating {i_batch} of {n_batch} ----\n")
+    comm = qp.rc.comm
+    division = qp.utils.TaskDivision(n_tot=n_batch, n_procs=comm.size, i_proc=comm.rank)
+    for i_batch in range(1 + division.i_start, 1 + division.i_stop):
+        qp.log.warning(
+            f"\n---- Generating {i_batch} of {n_batch} on process {comm.rank} ----\n"
+        )
         sampled_args = sample_dict(kwargs)
         try:
             run(filename=f"{prefix}{i_batch}.h5", **sampled_args)
