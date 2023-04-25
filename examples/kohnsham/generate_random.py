@@ -17,8 +17,8 @@ batch(
     n_bulk=lognorm(s=0.5, scale=0.5),
     Vshape=dict(
         shape="random",
-        sigma=loguniform(a=0.03, b=3.0),
+        sigma=loguniform(a=0.1, b=3.0),
         seed=randint(1, np.iinfo(np.int32).max),
     ),
-    lbda=dict(min=0.0, max=4.0, step=0.2),
+    lbda=dict(min=0.0, max=5.0, step=0.2),
 )

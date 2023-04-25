@@ -68,7 +68,7 @@ def run(
             if isinstance(dft, Minimizer):
                 f_bulks = dft.functionals[-1].get_energy_bulk(n_bulks)
             elif isinstance(dft, Schrodinger):
-                f_bulks = ThomasFermi().get_energy_bulk(n_bulks)
+                f_bulks = ThomasFermi(dft.T).get_energy_bulk(n_bulks)
             else:
                 continue
             plt.plot(

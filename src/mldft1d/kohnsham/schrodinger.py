@@ -21,20 +21,15 @@ class Schrodinger:
         """Initializes to bulk fluid with no external potential."""
         self.grid1d = grid1d
         self.n_bulk = n_bulk
-        self.mu = get_mu([ElectronTemperatureCorrection(T), ThomasFermi()], n_bulk)
+        self.mu = get_mu([ThomasFermi(T)], n_bulk)
         self.T = T
         self.n = qp.grid.FieldR(grid1d.grid, data=torch.zeros_like(grid1d.z))
         self.V = self.n.zeros_like()
         self.energy = qp.Energy()
 
     def known_V(self) -> Optional[qp.grid.FieldR]:
-        """Return potential due to temperature correction (as an LDA)."""
-        n = self.n.clone()
-        n.data.requires_grad = True
-        n.data.grad = None
-        E = ElectronTemperatureCorrection(self.T).get_energy(n)
-        (E / n.grid.dV).backward()  # functional derivative -> n.data.grad
-        return qp.grid.FieldR(n.grid, data=n.data.grad)
+        """No known potential: learn the entire part in ML."""
+        return None
 
     def minimize(self) -> qp.Energy:
         Nk = 2 * np.ceil(2 * np.pi / (self.grid1d.L * self.T))  # assuming vF ~ 1
@@ -101,33 +96,22 @@ class Schrodinger:
 
 
 class ThomasFermi:
-    """Bulk kinetic energy density functional."""
+    """Bulk kinetic energy density functional, with optional temperature correction."""
 
     prefactor: float
-
-    def __init__(self) -> None:
-        self.prefactor = (np.pi**2) / 24
-
-    def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
-        return self.prefactor * (n**3)
-
-
-class ElectronTemperatureCorrection:
-    """Temperature correction to kinetic energy."""
-
     T: float  #: Temperature (Fermi smearing)
 
-    def __init__(self, T: float):
+    def __init__(self, T: float = 0.0) -> None:
+        self.prefactor = (np.pi**2) / 24
         self.T = T
 
-    def get_energy(self, n: qp.grid.FieldR) -> torch.Tensor:
-        e = qp.grid.FieldR(n.grid, data=self.get_energy_per_particle(n.data))
-        return n ^ e
-
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
-        return n * self.get_energy_per_particle(n)
+        e = self.prefactor * (n**3)  # Thomas-Fermi (T=0) part in 1D
+        if self.T:
+            e += n * self.energy_correction_per_particle(n)
+        return e
 
-    def get_energy_per_particle(self, n: torch.Tensor) -> torch.Tensor:
+    def energy_correction_per_particle(self, n: torch.Tensor) -> torch.Tensor:
         x = n.square() / (2 * self.T)
         x_sq = x.square()
         low_density = 2.0 - (np.pi * x).log() - 1.311 * x.sqrt()

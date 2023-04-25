@@ -1,5 +1,5 @@
-__all__ = ["Schrodinger", "ThomasFermi", "ElectronTemperatureCorrection", "make_dft"]
+__all__ = ["Schrodinger", "ThomasFermi", "make_dft"]
 
 
-from .schrodinger import Schrodinger, ThomasFermi, ElectronTemperatureCorrection
+from .schrodinger import Schrodinger, ThomasFermi
 from . import make_dft
