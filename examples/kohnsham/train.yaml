@@ -1,9 +1,9 @@
 functional:
   n-weights: [5, 3]
-  w-hidden-sizes: [30, 30]
-  f-hidden-sizes: [30, 30]
+  w-hidden-sizes: [30, 30, 30]
+  f-hidden-sizes: [30, 30, 30]
   load-file: params.dat
-  rc: 5.0
+  rc: 2.0
 
 data:
   filenames: random_data/*.h5
