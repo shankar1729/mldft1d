@@ -6,7 +6,6 @@ import torch
 import os
 from mpi4py import MPI
 from .function import Function
-from typing import Optional
 
 
 class Functional(torch.nn.Module):  # type: ignore
@@ -20,7 +19,6 @@ class Functional(torch.nn.Module):  # type: ignore
     rc: float  #: Real space cutoff on weight functions
     cache_w: bool  #: Whether to precompute weight functions (must be off for training)
     _cached_w_tilde: dict[qp.grid.Grid, torch.Tensor]  #: cached weight functions
-    _cached_f0: Optional[torch.Tensor]  #: cached f(n=0)
 
     def __init__(
         self,
@@ -39,13 +37,12 @@ class Functional(torch.nn.Module):  # type: ignore
         self.i_odd_pair = get_pair_indices(n_weights_odd)
         self.n_irred = n_weights_even + len(self.i_odd_pair)
         self.w = Function(1, sum(n_weights), w_hidden_sizes)
-        self.f = Function(self.n_irred, self.n_irred, f_hidden_sizes)
+        self.f = Function(self.n_irred, 1, f_hidden_sizes)
         self.rc = rc
         self.cache_w = cache_w
         if comm.size > 1:
             self.bcast_parameters(comm)
         self._cached_w_tilde = dict()
-        self._cached_f0 = None
 
     @classmethod
     def load(
@@ -111,16 +108,6 @@ class Functional(torch.nn.Module):  # type: ignore
         Nw, Nz = w_tilde.shape
         return w_tilde.view(Nw, *((1,) * (n_dim_tot - 2)), Nz)
 
-    def get_f0(self, n_dim_tot: int = 1) -> torch.Tensor:
-        """Compute f(n=0) for specified grid and total dimension count."""
-        if self.cache_w and (self._cached_f0 is not None):
-            f0 = self._cached_f0
-        else:
-            f0 = self.f(torch.zeros((self.n_irred,), device=qp.rc.device))
-            if self.cache_w:
-                self._cached_f0 = f0.detach()
-        return f0.view(self.n_irred, *((1,) * (n_dim_tot - 1)))
-
     def get_energy(self, n: qp.grid.FieldR) -> torch.Tensor:
         # Compute weighted densities:
         n_dim_tot = len(n.data.shape) + 1
@@ -130,14 +117,13 @@ class Functional(torch.nn.Module):  # type: ignore
         scalars = qp.grid.FieldR(n.grid, data=torch.cat((n_even, n_odd_sq), dim=0))
 
         # Evaluate free energy:
-        f = qp.grid.FieldR(n.grid, data=(self.f(scalars.data) - self.get_f0(n_dim_tot)))
-        return (scalars ^ f).sum(dim=0)
+        f = qp.grid.FieldR(n.grid, data=self.f(scalars.data)[0])
+        return n ^ f
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
         n_bar = torch.zeros((self.n_irred,) + n.shape, device=n.device, dtype=n.dtype)
         n_bar[: self.n_weights[0]] = n
-        f0 = self.get_f0(len(n_bar.shape))
-        return (n_bar * (self.f(n_bar) - f0)).sum(dim=0)
+        return n * self.f(n_bar)[0]
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:
         """Broadcast i.e. synchronize module parameters over `comm`."""
