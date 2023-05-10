@@ -37,11 +37,21 @@ class Exact:
         return None
 
     def minimize(self) -> qp.Energy:
-        # Compute density and energy
+        # Compute density:
+        n = self.n.data[0, 0]
+        n[...] = self.unmap(fsolve(self.root_function, self.map(n)))
+
+        # Compute energy by numerically integrating exact potential = -dEint/dn:
         energy = self.energy
-        n_data = self.n.data[0, 0]
-        self.n.data[0, 0] = self.unmap(fsolve(self.root_function, self.map(n_data)))
-        return energy  # TODO: actually compute energy
+        n_ref = 0.5  # unpolarized system will have zero energy
+        n_steps = 100  # number of integration steps
+        dn = (n - n_ref) / n_steps
+        i_step = torch.arange(n_steps, device=qp.rc.device) + 0.5  # interval midpoints
+        n_path = n_ref + torch.outer(i_step, dn)
+        V_path = self.exact_potential(n_path)
+        energy["Int"] = (V_path @ dn).sum().item() * (-self.grid1d.dz)  # internal
+        energy["Ext"] = ((self.V - self.mu) ^ self.n).sum().item()
+        return energy
 
     def E(self, n: torch.Tensor, n_prime: torch.Tensor) -> torch.Tensor:
         """Function defined below Eq. 20 of Percus ref."""
@@ -55,9 +65,17 @@ class Exact:
         )
 
     def bulk_potential(self, n: torch.Tensor) -> torch.Tensor:
-        """Solution of U from Eq. 19 for a spatially uniform rho."""
+        """Solution of potential from Eq. 20 for a spatially uniform n."""
         return -self.T * torch.log(
             self.E(n, n) ** 2 / (4.0 * self.e**2 * n * (1.0 - n))
+        )
+
+    def exact_potential(self, n: torch.Tensor) -> torch.Tensor:
+        """Solution of potential from Eq. 20 for inhomogeneous n."""
+        return -self.T * torch.log(
+            self.E(n, torch.roll(n, +1, dims=-1))
+            * self.E(n, torch.roll(n, -1, dims=-1))
+            / (4.0 * self.e**2 * n * (1.0 - n))
         )
 
     @property
@@ -79,14 +97,5 @@ class Exact:
         """Eq. 20 of Percus ref. cast as a root function to solvqe for n."""
         n = Exact.unmap(n_mapped)
         V = self.V.data[0, 0]
-        V_error = (
-            V
-            - self.mu
-            + self.T
-            * torch.log(
-                self.E(n, torch.roll(n, +1))
-                * self.E(n, torch.roll(n, -1))
-                / (4.0 * self.e**2 * n * (1.0 - n))
-            )
-        )
+        V_error = self.exact_potential(n) - (V - self.mu)
         return V_error.to(qp.rc.cpu).numpy()

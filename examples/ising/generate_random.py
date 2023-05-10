@@ -21,5 +21,5 @@ batch(
         sigma=loguniform(a=2.0, b=10.0),
         seed=randint(1, np.iinfo(np.int32).max),
     ),
-    lbda=dict(min=0.0, max=5.0, step=0.2),
+    lbda=dict(min=0.0, max=2.0, step=0.1),
 )
