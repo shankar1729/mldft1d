@@ -2,7 +2,7 @@ import qimpy as qp
 import numpy as np
 from .. import Grid1D, get1D
 from . import v_shape
-from .. import hardrods, kohnsham, protocols
+from .. import hardrods, kohnsham, ising, protocols
 from typing import Callable, Protocol, Optional, Any
 from dataclasses import dataclass
 import h5py
@@ -12,6 +12,7 @@ import sys
 make_exact_dft_map: dict[str, Callable[..., protocols.DFT]] = {
     "hardrods": hardrods.make_dft.exact,
     "kohnsham": kohnsham.make_dft.exact,
+    "ising": ising.make_dft.exact,
 }  #: Recognized exact DFTs that can be used for data generation
 
 

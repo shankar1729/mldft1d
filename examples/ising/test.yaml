@@ -1,0 +1,15 @@
+L: 100.0
+dz: 1.0
+n_bulk: 0.5
+T: 0.5
+J: -1.0
+
+Vshape:
+  shape: gauss
+  sigma: 5.0
+
+lbda: 3.0
+
+functionals:
+  Exact:
+    ising-exact: {}
