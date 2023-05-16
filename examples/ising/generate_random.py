@@ -15,7 +15,7 @@ batch(
     dz=1.0,
     T=0.5,
     J=-1.0,
-    n_bulk=uniform(loc=0.1, scale=0.8),
+    n_bulk=uniform(loc=-0.8, scale=1.6),
     Vshape=dict(
         shape="random",
         sigma=loguniform(a=2.0, b=10.0),
