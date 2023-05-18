@@ -1,12 +1,13 @@
 import torch
 import qimpy as qp
 import numpy as np
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from scipy.special import hermite, loggamma
+from functools import cache, cached_property
 from abc import abstractmethod
 
 
-@dataclass
+@dataclass(eq=True, frozen=True)
 class Basis:
     """Abstract base class for weight function basis sets."""
 
@@ -19,8 +20,24 @@ class Basis:
         Each output should be sized (n_basis_odd/even,) + G.shape."""
         ...
 
+    @cache
+    def __call__(self, grid: qp.grid.Grid) -> tuple[torch.Tensor, torch.Tensor]:
+        """Interface to calculate basis for a (1D) grid."""
+        Gz = grid.get_gradient_operator("H")[2, 0, 0].imag
+        return self.get(Gz)
 
-@dataclass
+    @cached_property
+    def o(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """G=0 component of basis functions."""
+        Gzero = torch.tensor(0.0, device=qp.rc.device)
+        return self.get(Gzero)
+
+    def asdict(self) -> dict:
+        result = asdict(self)
+        result["type"] = self.__class__.__name__.lower()
+        return result
+
+
 class Hermite(Basis):
     """Eigenbasis of quantum Harmonic oscillator."""
 
@@ -49,7 +66,6 @@ class Hermite(Basis):
         return basis[::2], basis[1::2]  # Split even and odd basis
 
 
-@dataclass
 class Well(Basis):
     """Eigenbasis of infinite well (particle in a box)."""
 
@@ -81,10 +97,9 @@ def main():
     L = 10.0
     dz = 0.05
     grid1d = Grid1D(L=L, dz=dz)
-    G = grid1d.iGz * (2 * np.pi / L)
     z_np = get1D(grid1d.z)
-    for label, style, w_tilde in zip(("Even", "Odd"), ("r", "b"), basis.get(G)):
-        w = torch.fft.irfft(w_tilde.detach()[:, 0, 0]).real / dz
+    for label, style, w_tilde in zip(("Even", "Odd"), ("r", "b"), basis(grid1d.grid)):
+        w = torch.fft.irfft(w_tilde.detach()).real / dz
         plt.plot(z_np, w.to(qp.rc.cpu).numpy().T, style, label=f"{label} weights")
         overlap = (w @ w.T) * dz
         print(f"\nOverlap matrix for {label} weights:\n{qp.utils.fmt(overlap)}")

@@ -3,6 +3,7 @@ import qimpy as qp
 import math
 import torch
 from torch.nn.parameter import Parameter
+from typing import Optional
 
 
 class Function(torch.nn.Module):
@@ -39,28 +40,34 @@ class Function(torch.nn.Module):
 class Linear(torch.nn.Module):
     """Linear layer, adapted from torch.nn.Linear to operate on first dimension."""
 
-    __constants__ = ["n_in", "n_out", "n_batch"]
+    __constants__ = ["n_in", "n_out"]
     n_in: int
     n_out: int
     weight: torch.Tensor
-    bias: torch.Tensor
+    bias: Optional[torch.Tensor]
 
-    def __init__(self, n_in: int, n_out: int, **kwargs) -> None:
+    def __init__(self, n_in: int, n_out: int, bias: bool = True, **kwargs) -> None:
         super().__init__()
         self.n_in = n_in
         self.n_out = n_out
         self.weight = Parameter(torch.empty((n_out, n_in), **kwargs))
-        self.bias = Parameter(torch.empty((n_out,), **kwargs))
+        if bias:
+            self.bias = Parameter(torch.empty((n_out,), **kwargs))
+        else:
+            self.register_parameter("bias", None)
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
         bound = 1 / math.sqrt(self.n_in)
         torch.nn.init.uniform_(self.weight, -bound, bound)
-        torch.nn.init.uniform_(self.bias, -bound, bound)
+        if self.bias is not None:
+            torch.nn.init.uniform_(self.bias, -bound, bound)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        bias = self.bias.view((self.n_out,) + (1,) * (len(x.shape) - 1))
-        return torch.tensordot(self.weight, x, dims=1) + bias
+        result = torch.tensordot(self.weight.to(x.dtype), x, dims=1)
+        if self.bias is not None:
+            result += self.bias.view((self.n_out,) + (1,) * (len(x.shape) - 1))
+        return result
 
     def extra_repr(self) -> str:
         return f"n_in={self.n_in}, n_out={self.n_out}"

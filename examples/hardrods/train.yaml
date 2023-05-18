@@ -1,9 +1,11 @@
 functional:
   n-weights: [5, 3]
-  w-hidden-sizes: [30, 30]
+  basis:
+    type: hermite
+    r_max: 2.0
+    n_basis: 40
   f-hidden-sizes: [30, 30]
   load-file: params.dat
-  rc: 2.0
 
 data:
   filenames: random_data/*.h5
@@ -18,4 +20,3 @@ train:
   method: Adam
   lr: 1.0E-3
   weight-decay: 1.0E-3
-
