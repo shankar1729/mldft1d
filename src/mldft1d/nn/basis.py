@@ -81,7 +81,32 @@ class Well(Basis):
         return basis[::2], basis[1::2]  # Split even and odd basis
 
 
-make_basis_map: dict[str, type] = {"hermite": Hermite, "well": Well}
+class Cspline(Basis):
+    """Cubic spline basis (blip functions)."""
+
+    def get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        h = self.r_max / (self.n_basis - 1)
+        offsets = h * torch.arange(self.n_basis, device=G.device)
+
+        # Construct reference blip basis function at origin:
+        n_points = 100  # number of points per spline interval for construction
+        dz = h / n_points
+        z = dz * torch.arange(-2 * n_points, 2 * n_points + 1, device=G.device)
+        t = (z / h).abs()
+        blip = torch.where(t < 1.0, 1 + 0.75 * t * t * (t - 2), 0.25 * (2 - t) ** 3)
+        phase = torch.exp(1j * torch.einsum("z, ... -> z...", z, G))
+        blip_tilde = torch.tensordot(blip.to(phase.dtype), phase, dims=1) * dz
+
+        # Move basis functions into place with even and odd symmetry:
+        translations = torch.exp(-1j * torch.einsum("z, ... -> z...", offsets, G))
+        basis_plus = blip_tilde * translations
+        basis_minus = blip_tilde * translations.conj()
+        basis_even = basis_plus + basis_minus
+        basis_odd = basis_plus - basis_minus
+        return basis_even, basis_odd
+
+
+make_basis_map: dict[str, type] = {"hermite": Hermite, "well": Well, "cspline": Cspline}
 
 
 def make_basis(type: str, **kwargs) -> Basis:
@@ -93,7 +118,7 @@ def main():
     from ..grid1d import Grid1D, get1D
     import matplotlib.pyplot as plt
 
-    basis = make_basis(type="well", n_basis=10, r_max=3.5)
+    basis = make_basis(type="cspline", n_basis=10, r_max=3.5)
     L = 10.0
     dz = 0.05
     grid1d = Grid1D(L=L, dz=dz)

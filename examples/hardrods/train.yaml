@@ -1,7 +1,7 @@
 functional:
   n-weights: [3, 2]
   basis:
-    type: hermite
+    type: cspline
     r_max: 2.0
     n_basis: 10
   f-hidden-sizes: [30, 30]

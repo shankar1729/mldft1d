@@ -94,10 +94,14 @@ def run(
                         ("r", "b"),
                         w.detach().to(qp.rc.cpu)[:, 0, 0].split(functional.n_weights),
                     ):
-                        plt.plot(z1d, w_set.numpy().T, style, label=f"{label} weights")
+                        w_np = w_set.numpy()
+                        label = f"{label} weights"
+                        for i_w, w_i in enumerate(w_np):
+                            plt.plot(z1d, w_i, style, label=("" if i_w else label))
                     plt.xlim(0, 0.5 * L)
                     plt.xlabel("$z$")
                     plt.ylabel("$w(z)$")
+                    plt.legend()
                     plt.title(f"Weight functions for {dft_name}")
 
         plt.show()
