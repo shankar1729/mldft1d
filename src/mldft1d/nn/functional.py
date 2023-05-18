@@ -32,11 +32,10 @@ class Functional(torch.nn.Module):  # type: ignore
         self.i_odd_pair = get_pair_indices(n_weights_odd)
         self.n_irred = n_weights_even + len(self.i_odd_pair)
         self.basis = make_basis(**basis)
-        basis_o_even, basis_o_odd = self.basis.o
         self.w = torch.nn.ModuleList(
             [
-                Linear(len(basis_o_i), n_weights_i, bias=False, device=qp.rc.device)
-                for basis_o_i, n_weights_i in zip(self.basis.o, n_weights)
+                Linear(self.basis.n_basis, n_weights_i, bias=False, device=qp.rc.device)
+                for n_weights_i in n_weights
             ]
         )
         self.f = Function(self.n_irred, 1, f_hidden_sizes)

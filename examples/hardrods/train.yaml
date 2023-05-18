@@ -1,9 +1,9 @@
 functional:
-  n-weights: [5, 3]
+  n-weights: [3, 2]
   basis:
     type: hermite
     r_max: 2.0
-    n_basis: 40
+    n_basis: 10
   f-hidden-sizes: [30, 30]
   load-file: params.dat
 

@@ -11,13 +11,13 @@ from abc import abstractmethod
 class Basis:
     """Abstract base class for weight function basis sets."""
 
-    n_basis: int  #: total number of basis functions
+    n_basis: int  #: number of basis functions of each symmetry (odd / even)
     r_max: float  #: nominal spatial extent of basis (need not be a sharp cutoff)
 
     @abstractmethod
     def get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Get even and odd basis functions for specified reciprocal lattice.
-        Each output should be sized (n_basis_odd/even,) + G.shape."""
+        Each output should be sized (n_basis,) + G.shape."""
         ...
 
     @cache
@@ -44,13 +44,13 @@ class Hermite(Basis):
     @property
     def sigma(self) -> float:
         """Gaussian width of ground state."""
-        return self.r_max / np.sqrt(2 * self.n_basis)
+        return self.r_max / np.sqrt(4 * self.n_basis)
 
     def get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # Compute Hermite polynomials (using scipy):
         sigma = self.sigma
         sigmaG = sigma * G.to(qp.rc.cpu).numpy()
-        i_bases = np.arange(self.n_basis)
+        i_bases = np.arange(2 * self.n_basis)
         basis_np = np.array(
             [hermite(i_basis, monic=True)(sigmaG) for i_basis in i_bases]
         )
@@ -72,7 +72,7 @@ class Well(Basis):
     def get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         rc = self.r_max  # sharp cutoff (half-width of well)
         k = (
-            torch.arange(1, self.n_basis + 1, device=G.device) * np.pi / (2 * rc)
+            torch.arange(1, 2 * self.n_basis + 1, device=G.device) * np.pi / (2 * rc)
         ).view((-1,) + (1,) * len(G.shape))
         prefactor = -1j * torch.exp(1j * k * rc) * np.sqrt(rc)
         basis = prefactor * torch.special.spherical_bessel_j0(
@@ -93,7 +93,7 @@ def main():
     from ..grid1d import Grid1D, get1D
     import matplotlib.pyplot as plt
 
-    basis = make_basis(type="hermite", n_basis=31, r_max=3.5)
+    basis = make_basis(type="well", n_basis=10, r_max=3.5)
     L = 10.0
     dz = 0.05
     grid1d = Grid1D(L=L, dz=dz)
