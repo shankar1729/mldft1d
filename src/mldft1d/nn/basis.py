@@ -11,6 +11,7 @@ class Basis:
     """Abstract base class for weight function basis sets."""
 
     n_basis: int  #: total number of basis functions
+    r_max: float  #: nominal spatial extent of basis (need not be a sharp cutoff)
 
     @abstractmethod
     def get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -23,11 +24,15 @@ class Basis:
 class Hermite(Basis):
     """Eigenbasis of quantum Harmonic oscillator."""
 
-    sigma: float  #: Gaussian width of ground state
+    @property
+    def sigma(self) -> float:
+        """Gaussian width of ground state."""
+        return self.r_max / np.sqrt(2 * self.n_basis)
 
     def get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # Compute Hermite polynomials (using scipy):
-        sigmaG = self.sigma * G.to(qp.rc.cpu).numpy()
+        sigma = self.sigma
+        sigmaG = sigma * G.to(qp.rc.cpu).numpy()
         i_bases = np.arange(self.n_basis)
         basis_np = np.array(
             [hermite(i_basis, monic=True)(sigmaG) for i_basis in i_bases]
@@ -37,11 +42,34 @@ class Hermite(Basis):
         basis_np *= np.exp(-0.5 * np.square(sigmaG))[None]
         prefactor = np.exp(
             0.5 * ((np.log(2) + 1j * np.pi) * i_bases - loggamma(i_bases + 1))
-        ) * np.sqrt(self.sigma * 2 * np.sqrt(np.pi))
+        ) * np.sqrt(sigma * 2 * np.sqrt(np.pi))
         basis = torch.from_numpy(np.einsum("b, b... -> b...", prefactor, basis_np)).to(
             G.device
         )
-        return basis[::2], basis[1::2]  # Spit even and odd basis
+        return basis[::2], basis[1::2]  # Split even and odd basis
+
+
+@dataclass
+class Well(Basis):
+    """Eigenbasis of infinite well (particle in a box)."""
+
+    def get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        rc = self.r_max  # sharp cutoff (half-width of well)
+        k = (
+            torch.arange(1, self.n_basis + 1, device=G.device) * np.pi / (2 * rc)
+        ).view((-1,) + (1,) * len(G.shape))
+        prefactor = -1j * torch.exp(1j * k * rc) * np.sqrt(rc)
+        basis = prefactor * torch.special.spherical_bessel_j0(
+            (k + G) * rc
+        ) + prefactor.conj() * torch.special.spherical_bessel_j0((k - G) * rc)
+        return basis[::2], basis[1::2]  # Split even and odd basis
+
+
+make_basis_map: dict[str, type] = {"hermite": Hermite, "well": Well}
+
+
+def make_basis(type: str, **kwargs) -> Basis:
+    return make_basis_map[type](**kwargs)
 
 
 def main():
@@ -49,11 +77,11 @@ def main():
     from ..grid1d import Grid1D, get1D
     import matplotlib.pyplot as plt
 
-    L = 15.0
+    basis = make_basis(type="hermite", n_basis=31, r_max=3.5)
+    L = 10.0
     dz = 0.05
     grid1d = Grid1D(L=L, dz=dz)
     G = grid1d.iGz * (2 * np.pi / L)
-    basis = Hermite(n_basis=51, sigma=0.5)
     z_np = get1D(grid1d.z)
     for label, style, w_tilde in zip(("Even", "Odd"), ("r", "b"), basis.get(G)):
         w = torch.fft.irfft(w_tilde.detach()[:, 0, 0]).real / dz
