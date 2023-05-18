@@ -39,7 +39,7 @@ class Exact:
     def minimize(self) -> qp.Energy:
         # Compute density:
         n = self.n.data[0, 0]
-        n[...] = self.unmap(fsolve(self.root_function, self.map(n)))
+        n[:] = self.unmap(fsolve(self.root_function, self.map(n)))
 
         # Compute energy by numerically integrating exact potential = -dEint/dn:
         energy = self.energy
