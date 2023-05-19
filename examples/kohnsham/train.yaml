@@ -5,6 +5,7 @@ functional:
     r_max: 2.0
     n_basis: 10
   f-hidden-sizes: [30, 30, 30]
+  use_local: True
   load-file: params.dat
 
 data:

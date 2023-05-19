@@ -16,6 +16,7 @@ class Functional(torch.nn.Module):  # type: ignore
     basis: Basis  #: Basis functions for expanding the nonlocal weight functions
     w: torch.nn.ModuleList  #: Linear combinations of even and odd basis
     f: Function  #: Per-particle free energy function of weighted densities
+    use_local: bool  #: If true, local density/gradient count as an odd/even weight
 
     def __init__(
         self,
@@ -24,6 +25,7 @@ class Functional(torch.nn.Module):  # type: ignore
         n_weights: tuple[int, int],
         basis: dict,
         f_hidden_sizes: list[int],
+        use_local: bool = False,
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
@@ -34,11 +36,17 @@ class Functional(torch.nn.Module):  # type: ignore
         self.basis = make_basis(**basis)
         self.w = torch.nn.ModuleList(
             [
-                Linear(self.basis.n_basis, n_weights_i, bias=False, device=qp.rc.device)
+                Linear(
+                    self.basis.n_basis,
+                    n_weights_i - (1 if use_local else 0),
+                    bias=False,
+                    device=qp.rc.device,
+                )
                 for n_weights_i in n_weights
             ]
         )
         self.f = Function(self.n_irred, 1, f_hidden_sizes)
+        self.use_local = use_local
         if comm.size > 1:
             self.bcast_parameters(comm)
 
@@ -80,6 +88,7 @@ class Functional(torch.nn.Module):  # type: ignore
             n_weights=self.n_weights,
             basis=self.basis.asdict(),
             f_hidden_sizes=self.f.n_hidden,
+            use_local=self.use_local,
             state=self.state_dict(),
         )
         if comm.rank == 0:
@@ -88,6 +97,9 @@ class Functional(torch.nn.Module):  # type: ignore
     def get_w_tilde(self, grid: qp.grid.Grid, n_dim_tot: int = 2) -> torch.Tensor:
         """Compute weights for specified grid and total dimension count."""
         w_tildes = [w(basis) for w, basis in zip(self.w, self.basis(grid))]
+        if self.use_local:
+            w_tildes.insert(1, torch.ones_like(w_tildes[0][:1]))  # for local density
+            w_tildes.append(grid.get_gradient_operator("H")[2:, 0, 0])  # for gradient
         w_tilde = torch.cat(w_tildes, dim=0)  # combine for efficient convolution below
         Nw, Nz = w_tilde.shape
         return w_tilde.view(Nw, *((1,) * (n_dim_tot - 2)), Nz)  # Add singleton dims
@@ -108,7 +120,9 @@ class Functional(torch.nn.Module):  # type: ignore
         basis_o_even = self.basis.o[0]  # G=0 component of even basis (0 for odd)
         w_o_even = self.w[0](basis_o_even)
         n_bar = torch.zeros((self.n_irred,) + n.shape, device=n.device, dtype=n.dtype)
-        n_bar[: self.n_weights[0]] = torch.einsum("w, ... -> w...", w_o_even, n)
+        n_bar[: len(w_o_even)] = torch.einsum("w, ... -> w...", w_o_even, n)
+        if self.use_local:
+            n_bar[len(w_o_even)] = n
         return n * self.f(n_bar)[0]
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:

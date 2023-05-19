@@ -95,6 +95,8 @@ def run(
                         w.detach().to(qp.rc.cpu)[:, 0, 0].split(functional.n_weights),
                     ):
                         w_np = w_set.numpy()
+                        if functional.use_local:
+                            w_np = w_np[:-1]  # don't plot the local weight
                         label = f"{label} weights"
                         for i_w, w_i in enumerate(w_np):
                             plt.plot(z1d, w_i, style, label=("" if i_w else label))
