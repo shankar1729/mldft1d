@@ -1,12 +1,18 @@
 functional:
-  n-weights: [5, 3]
-  basis:
-    type: cspline
-    r_max: 2.0
-    n_basis: 10
-  f-hidden-sizes: [30, 30, 30]
-  use_local: True
   load-file: params.dat
+  layers:
+  - n-weights: [3, 2]
+    n-outputs: 5
+    hidden-sizes: [30, 30]
+    basis: {type: cspline, r_max: 2.0, n_basis: 5, use_local: True, use_gradient: True}
+  - n-weights: [3, 2]
+    n-outputs: 5
+    hidden-sizes: [30, 30]
+    basis: {type: cspline, r_max: 4.0, n_basis: 5, use_local: True}
+  - n-weights: [3, 2]
+    n-outputs: 1
+    hidden-sizes: [30, 30]
+    basis: {type: cspline, r_max: 8.0, n_basis: 5, use_local: True}
 
 data:
   filenames: random_data/*.h5

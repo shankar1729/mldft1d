@@ -13,18 +13,49 @@ class Basis:
 
     n_basis: int  #: number of basis functions of each symmetry (odd / even)
     r_max: float  #: nominal spatial extent of basis (need not be a sharp cutoff)
+    use_local: bool = False  #: If true, local density is an extra even weight
+    use_gradient: bool = False  #: If true, local gradient is an extra odd weight
+
+    def get(
+        self, G: torch.Tensor, suppress_local: bool = False
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Get even and odd basis functions for specified reciprocal lattice.
+        Adds local density and gradient if specified.
+        Optionally, suppress local/gradient contributions for plotting."""
+        basis_even, basis_odd = self._get(G)
+        if self.use_local:
+            ones = torch.ones_like(basis_even[:1])
+            if suppress_local:
+                ones.zero_()
+            basis_even = torch.cat((basis_even, ones), dim=0)
+        if self.use_gradient:
+            gradient = 1j * G[None]
+            if suppress_local:
+                gradient.zero_()
+            basis_odd = torch.cat((basis_odd, gradient), dim=0)
+        return basis_even, basis_odd
+
+    @property
+    def n_basis_even(self) -> int:
+        return self.n_basis + (1 if self.use_local else 0)
+
+    @property
+    def n_basis_odd(self) -> int:
+        return self.n_basis + (1 if self.use_gradient else 0)
 
     @abstractmethod
-    def get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Get even and odd basis functions for specified reciprocal lattice.
         Each output should be sized (n_basis,) + G.shape."""
         ...
 
     @cache
-    def __call__(self, grid: qp.grid.Grid) -> tuple[torch.Tensor, torch.Tensor]:
+    def __call__(
+        self, grid: qp.grid.Grid, suppress_local: bool = False
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Interface to calculate basis for a (1D) grid."""
         Gz = grid.get_gradient_operator("H")[2, 0, 0].imag
-        return self.get(Gz)
+        return self.get(Gz, suppress_local)
 
     @cached_property
     def o(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -46,7 +77,7 @@ class Hermite(Basis):
         """Gaussian width of ground state."""
         return self.r_max / np.sqrt(4 * self.n_basis)
 
-    def get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # Compute Hermite polynomials (using scipy):
         sigma = self.sigma
         sigmaG = sigma * G.to(qp.rc.cpu).numpy()
@@ -69,7 +100,7 @@ class Hermite(Basis):
 class Well(Basis):
     """Eigenbasis of infinite well (particle in a box)."""
 
-    def get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         rc = self.r_max  # sharp cutoff (half-width of well)
         k = (
             torch.arange(1, 2 * self.n_basis + 1, device=G.device) * np.pi / (2 * rc)
@@ -84,7 +115,7 @@ class Well(Basis):
 class Cspline(Basis):
     """Cubic spline basis (blip functions)."""
 
-    def get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def _get(self, G: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         h = self.r_max / (self.n_basis - 1)
         offsets = h * torch.arange(self.n_basis, device=G.device)
 

@@ -86,26 +86,26 @@ def run(
         for dft_name, dft in dfts.items():
             if isinstance(dft, Minimizer):
                 if isinstance((functional := dft.functionals[-1]), nn.Functional):
-                    plt.figure()
-                    w_tilde = functional.get_w_tilde(grid1d.grid, n_dim_tot=4)
-                    w = torch.fft.irfft(w_tilde).real / dz
-                    for label, style, w_set in zip(
-                        ("Even", "Odd"),
-                        ("r", "b"),
-                        w.detach().to(qp.rc.cpu)[:, 0, 0].split(functional.n_weights),
-                    ):
-                        w_np = w_set.numpy()
-                        if functional.use_local:
-                            w_np = w_np[:-1]  # don't plot the local weight
-                        label = f"{label} weights"
-                        for i_w, w_i in enumerate(w_np):
-                            plt.plot(z1d, w_i, style, label=("" if i_w else label))
-                    plt.xlim(0, 0.5 * L)
-                    plt.xlabel("$z$")
-                    plt.ylabel("$w(z)$")
-                    plt.legend()
-                    plt.title(f"Weight functions for {dft_name}")
-
+                    for i_layer, layer in enumerate(functional.layers):
+                        plt.figure()
+                        w_tilde = layer.get_w_tilde(
+                            grid1d.grid, n_dim_tot=3, suppress_local=True
+                        )
+                        w = torch.fft.irfft(w_tilde).real / dz
+                        for label, style, w_set in zip(
+                            ("Even", "Odd"),
+                            ("r", "b"),
+                            w.detach().to(qp.rc.cpu).split(layer.n_weights, dim=1),
+                        ):
+                            w_np = w_set.flatten(0, 1).numpy()
+                            label = f"{label} weights"
+                            for i_w, w_i in enumerate(w_np):
+                                plt.plot(z1d, w_i, style, label=("" if i_w else label))
+                        plt.xlim(0, 0.5 * L)
+                        plt.xlabel("$z$")
+                        plt.ylabel("$w(z)$")
+                        plt.legend()
+                        plt.title(f"Weight functions in layer {i_layer} for {dft_name}")
         plt.show()
 
 

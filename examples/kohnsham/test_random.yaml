@@ -7,7 +7,7 @@ Vshape:
   sigma: 1.0
   seed: 2
   
-lbda: 1.0
+lbda: 0.5
 
 functionals:
   Exact:
