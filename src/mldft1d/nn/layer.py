@@ -24,6 +24,7 @@ class Layer(torch.nn.Module):  # type: ignore
         n_inputs: int,
         n_outputs: int,
         hidden_sizes: list[int],
+        activation: str = "softplus",
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
@@ -43,7 +44,7 @@ class Layer(torch.nn.Module):  # type: ignore
                 )
             ]
         )
-        self.f = Function(self.n_irred, n_outputs, hidden_sizes)
+        self.f = Function(self.n_irred, n_outputs, hidden_sizes, activation)
 
     def asdict(self) -> dict:
         """Save parameters to specified filename."""
@@ -53,6 +54,7 @@ class Layer(torch.nn.Module):  # type: ignore
             n_inputs=self.n_inputs,
             n_outputs=self.f.n_out,
             hidden_sizes=self.f.n_hidden,
+            activation=self.f.activation.__class__.__name__.lower(),
         )
 
     def get_w_tilde(

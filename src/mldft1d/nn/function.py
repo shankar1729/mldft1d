@@ -6,6 +6,17 @@ from torch.nn.parameter import Parameter
 from typing import Optional
 
 
+activation_map: dict[str, type] = {
+    "softplus": torch.nn.Softplus,
+    "celu": torch.nn.CELU,
+    "gelu": torch.nn.GELU,
+    "silu": torch.nn.SiLU,
+    "mish": torch.nn.Mish,
+    "sigmoid": torch.nn.Sigmoid,
+    "tanh": torch.nn.Tanh,
+}  #: supported activation functions (must be smooth)
+
+
 class Function(torch.nn.Module):
     """Neural network approximation to a function with specified inputs and outputs."""
 
@@ -16,7 +27,13 @@ class Function(torch.nn.Module):
     layers: torch.nn.ModuleList  #: Linear layers
     activation: torch.nn.Module  #: Activation layers
 
-    def __init__(self, n_in: int, n_out: int, n_hidden: list[int]) -> None:
+    def __init__(
+        self,
+        n_in: int,
+        n_out: int,
+        n_hidden: list[int],
+        activation: str = "softplus",
+    ) -> None:
         super().__init__()
         self.n_in = n_in
         self.n_out = n_out
@@ -28,7 +45,7 @@ class Function(torch.nn.Module):
                 for n1, n2 in zip(n_nodes[:-1], n_nodes[1:])
             ]
         )
-        self.activation = torch.nn.Softplus()
+        self.activation = activation_map[activation.lower()]()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Evaluate NN function."""
