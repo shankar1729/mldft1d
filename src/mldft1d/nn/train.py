@@ -63,19 +63,24 @@ class Trainer(torch.nn.Module):  # type: ignore
         self.n_perturbations_train_tot = report("Training", self.data_train)
         self.n_perturbations_test_tot = report("Testing", self.data_test)
 
-    def forward(self, data: Data) -> torch.Tensor:
+    def forward(self, data: Data) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute loss function for one complete perturbation data-set"""
-        # Compute energy and gradient (= error in V):
+        # Compute energy and gradient errors:
         data.n.data.requires_grad = True
         data.n.data.grad = None
-        # TODO: systematically add known functional pieces (eg. IdealGas for hard rods)
-        E = self.functional.get_energy(data.n) + (data.V_minus_mu ^ data.n)
-        Verr = torch.autograd.grad(E.sum(), data.n.data, create_graph=True)[0]
-        return Verr.square().sum()  # converted to MSE loss over epoch below
+        Eerr = self.functional.get_energy(data.n) + (data.V_minus_mu ^ data.n) - data.E
+        Verr = torch.autograd.grad(Eerr.sum(), data.n.data, create_graph=True)[0]
+        return Eerr.square().sum(), Verr.square().sum()  # converted to MSE loss below
 
-    def train_loop(self, optimizer: torch.optim.Optimizer, batch_size: int) -> float:
-        """Run training loop and return mean loss (over epoch)."""
-        loss_total = 0.0
+    def train_loop(
+        self,
+        optimizer: torch.optim.Optimizer,
+        batch_size: int,
+        energy_loss_scale: float = 1.0,
+    ) -> tuple[float, float]:
+        """Run training loop and return mean losses (over epoch)."""
+        lossE_total = 0.0
+        lossV_total = 0.0
         n_perturbations = 0
         n_batches = qp.utils.ceildiv(self.n_perturbations_train_tot, batch_size)
         for data_batch in random_batch_split(self.data_train, n_batches):
@@ -83,28 +88,37 @@ class Trainer(torch.nn.Module):  # type: ignore
             # Step using total gradient over batch:
             optimizer.zero_grad()
             for data in data_batch:
-                loss = self(data)
-                loss.backward()
-                loss_total += loss.item()
+                lossE, lossV = self(data)
+                (lossE * energy_loss_scale + lossV).backward()
+                lossE_total += lossE.item()
+                lossV_total += lossV.item()
                 n_perturbations += data.n_perturbations
             self.functional.allreduce_parameters_grad(self.comm)
             optimizer.step()
             self.functional.bcast_parameters(self.comm)
         # Collect total loss statistics:
         if self.comm.size > 1:
-            loss_total = self.comm.allreduce(loss_total)
+            lossE_total = self.comm.allreduce(lossE_total)
+            lossV_total = self.comm.allreduce(lossV_total)
             n_perturbations = self.comm.allreduce(n_perturbations)
-        return loss_total / n_perturbations
+        return lossE_total / n_perturbations, lossV_total / n_perturbations
 
-    def test_loop(self) -> float:
+    def test_loop(self) -> tuple[float, float]:
         """Run test loop and return mean loss."""
-        loss_total = sum(self(data).item() for data in self.data_test)
-        n_perturbations = sum(data.n_perturbations for data in self.data_test)
+        lossE_total = 0.0
+        lossV_total = 0.0
+        n_perturbations = 0
+        for data in self.data_test:
+            lossE, lossV = self(data)
+            lossE_total += lossE.item()
+            lossV_total += lossV.item()
+            n_perturbations += data.n_perturbations
         # Collect total loss statistics:
         if self.comm.size > 1:
-            loss_total = self.comm.allreduce(loss_total)
+            lossE_total = self.comm.allreduce(lossE_total)
+            lossV_total = self.comm.allreduce(lossV_total)
             n_perturbations = self.comm.allreduce(n_perturbations)
-        return loss_total / n_perturbations
+        return lossE_total / n_perturbations, lossV_total / n_perturbations
 
 
 def load_data(
@@ -142,29 +156,48 @@ def run_training_loop(
     epochs: int,
     batch_size: int,
     method: str,
+    energy_loss_scale: float = 1.0,
     **method_kwargs,
 ) -> None:
     optimizer = get_optimizer(trainer.functional.parameters(), method, **method_kwargs)
     qp.log.info(f"Training for {epochs} epochs")
-    best_loss_test = trainer.test_loop()
-    loss_history = np.zeros((epochs, 2))
-    qp.log.info(f"Initial TestLoss: {best_loss_test:>7f}  t[s]: {qp.rc.clock():.1f}")
+    lossE_test, lossV_test = trainer.test_loop()
+    best_loss_test = lossE_test * energy_loss_scale + lossV_test
+    loss_history = np.zeros((epochs, 4))
+    qp.log.info(
+        f"Initial  TestLoss: E: {lossE_test:>7f}  V: {lossV_test:>7f}"
+        f"  t[s]: {qp.rc.clock():.1f}"
+    )
     for epoch in range(1, epochs + 1):
-        loss_train = trainer.train_loop(optimizer, batch_size)
-        loss_test = trainer.test_loop()
-        loss_history[epoch - 1] = (loss_train, loss_test)
+        lossE_train, lossV_train = trainer.train_loop(
+            optimizer, batch_size, energy_loss_scale=energy_loss_scale
+        )
+        lossE_test, lossV_test = trainer.test_loop()
+        loss_history[epoch - 1] = (lossE_train, lossV_train, lossE_test, lossV_test)
         qp.log.info(
-            f"Epoch: {epoch:3d}  TrainLoss: {loss_train:>7f}"
-            f"  TestLoss: {loss_test:>7f}  t[s]: {qp.rc.clock():.1f}"
+            f"Epoch: {epoch:3d}"
+            f"  TrainLoss: E: {lossE_train:>7f}  V: {lossV_train:>7f}"
+            f"  TestLoss: E: {lossE_test:>7f}  V: {lossV_test:>7f}"
+            f"  t[s]: {qp.rc.clock():.1f}"
         )
         if epoch % save_interval == 0:
-            np.savetxt(loss_curve, loss_history[:epoch], header="TrainLoss TestLoss")
+            np.savetxt(
+                loss_curve,
+                loss_history[:epoch],
+                header="TrainLossE TrainLossV TestLossE TestLossV",
+            )
+
+            # Save if weighted test loss combination decreased:
+            loss_test = lossE_test * energy_loss_scale + lossV_test
             if loss_test < best_loss_test:
                 best_loss_test = loss_test
                 trainer.functional.save(save_file, trainer.comm)
                 qp.log.info(f"Saved parameters to '{save_file}'")
             else:
-                qp.log.info(f"Skipped save because TestLoss >= {best_loss_test} (best)")
+                qp.log.info(
+                    f"Skipped save because weighted TestLoss >= {best_loss_test} (best)"
+                )
+
     qp.log.info("Done!")
 
 

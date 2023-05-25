@@ -27,8 +27,8 @@ class Schrodinger:
         self.V = self.n.zeros_like()
         self.energy = qp.Energy()
 
-    def known_V(self) -> Optional[qp.grid.FieldR]:
-        """No known potential: learn the entire part in ML."""
+    def known_part(self) -> Optional[tuple[float, qp.grid.FieldR]]:
+        """No known part: learn the entire part in ML."""
         return None
 
     def minimize(self) -> qp.Energy:

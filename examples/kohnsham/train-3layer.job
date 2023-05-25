@@ -1,0 +1,8 @@
+#!/bin/bash
+#SBATCH -p gpu -n 4 --gres=gpu:4 -o train-3layer.log
+
+module load openmpi-gpu
+module load venv/qimpy
+
+mpirun $OMPI_OPTIONS python -m mldft1d.nn.train train-3layer.yaml
+

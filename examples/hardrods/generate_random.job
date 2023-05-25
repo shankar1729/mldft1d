@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH -p gpu --gres=gpu:1 -n 1 --hint=nomultithread -o generate_random.log
+#SBATCH -p gpu --gres=gpu:4 -n 4 --hint=nomultithread -o generate_random.log
 
 module load openmpi-gpu venv/qimpy
 
-python generate_random.py
+mpirun python generate_random.py

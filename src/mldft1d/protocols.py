@@ -31,8 +31,8 @@ class DFT(Protocol):
     def minimize(self) -> qp.Energy:
         """Solve Euler-Lagrange equation and return equilibrium energy."""
 
-    def known_V(self) -> Optional[qp.grid.FieldR]:
-        """Return kown part of equilibrium potential eg. ideal gas, if any."""
+    def known_part(self) -> Optional[tuple[float, qp.grid.FieldR]]:
+        """Known part of equilibrium energy and potential eg. ideal gas, if any."""
 
 
 def get_mu(functionals: Sequence[FunctionBulk], n_bulk: float) -> float:

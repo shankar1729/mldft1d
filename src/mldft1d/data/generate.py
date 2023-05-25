@@ -38,7 +38,9 @@ def run(
     lbda_arr = get_lbda_arr(**qp.utils.dict.key_cleanup(lbda))
     E = np.zeros_like(lbda_arr)
     n = np.zeros((len(E), len(get1D(grid1d.z))))
-    V0 = None if (dft.known_V() is None) else np.zeros_like(n)
+    E0 = np.zeros_like(E)
+    V0 = np.zeros_like(n)
+    has_known_part = False
 
     # Split runs by sign and in increasing order of perturbation strength:
     abs_index = abs(lbda_arr).argsort()
@@ -50,10 +52,11 @@ def run(
             dft.V = lbda_arr[index] * V
             E[index] = float(dft.minimize())
             n[index] = get1D(dft.n.data)
-            if V0 is not None:
-                V0_i = dft.known_V()
-                assert V0_i is not None
+            if (EV0_i := dft.known_part()) is not None:
+                E0_i, V0_i = EV0_i
+                E0[index] = E0_i
                 V0[index] = get1D(V0_i.data)
+                has_known_part = True
 
     f = h5py.File(filename, "w")
     f["z"] = get1D(grid1d.z)
@@ -61,7 +64,8 @@ def run(
     f["lbda"] = lbda_arr
     f["n"] = n
     f["E"] = E
-    if V0 is not None:
+    if has_known_part:
+        f["E0"] = E0
         f["V0"] = V0
     f.attrs["mu"] = dft.mu
     f.attrs["n_bulk"] = n_bulk

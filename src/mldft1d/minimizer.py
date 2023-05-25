@@ -24,15 +24,16 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
         n_bulk: float,
         name: str,
     ) -> None:
+        grid_comm = grid1d.grid.comm
         super().__init__(
-            comm=qp.rc.comm,
+            comm=(qp.rc.MPI.COMM_SELF if (grid_comm is None) else grid_comm),
             checkpoint_in=qp.utils.CpPath(),
             name=name,
             n_iterations=1000,
             energy_threshold=1e-9,
             extra_thresholds={"|grad|": 1e-8},
             method="cg",
-            n_consecutive=1,
+            n_consecutive=2,
         )
         self.functionals = functionals
         self.grid1d = grid1d
@@ -82,8 +83,8 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
         grid = self.grid1d.grid
         return qp.grid.FieldR(grid, data=torch.randn(grid.shapeR_mine))
 
-    def known_V(self) -> Optional[qp.grid.FieldR]:
-        """Return potential from all but the last term."""
+    def known_part(self) -> Optional[tuple[float, qp.grid.FieldR]]:
+        """Return energy and potential from all but the last term."""
         n = self.n
         n.data.requires_grad = True
         n.data.grad = None
@@ -91,4 +92,4 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
         for functional in self.functionals[:-1]:
             E += functional.get_energy(n)
         (E / n.grid.dV).backward()  # functional derivative -> n.data.grad
-        return qp.grid.FieldR(n.grid, data=n.data.grad)
+        return E.item(), qp.grid.FieldR(n.grid, data=n.data.grad)

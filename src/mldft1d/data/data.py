@@ -25,8 +25,6 @@ class Data:
         lbda = torch.tensor(f["lbda"], device=qp.rc.device)
         mu = float(f.attrs["mu"])
         V_minus_mu = torch.outer(lbda, torch.tensor(f["V"], device=qp.rc.device)) - mu
-        if "V0" in f:
-            V_minus_mu += torch.tensor(f["V0"], device=qp.rc.device)
         n = torch.tensor(np.array(f["n"]), device=qp.rc.device)
         self.n_perturbations = len(lbda)
         self.E = torch.tensor(f["E"], device=qp.rc.device)
@@ -43,9 +41,18 @@ class Data:
         self.grid1d = get_grid1d(L, dz)
         assert len(z) == self.grid1d.z.shape[2]
 
+        # Remove known part of energy and potential:
+        if "V0" in f:
+            assert "E0" in f
+            V0 = torch.tensor(f["V0"], device=qp.rc.device)
+            E0 = torch.tensor(f["E0"], device=qp.rc.device)
+            self.E += (V0 * n).sum(dim=1) * dz - E0
+            V_minus_mu += V0
+
         # Create fieldR's for n and V:
+        self.E = self.E.detach()
         self.V_minus_mu = qp.grid.FieldR(
-            self.grid1d.grid, data=V_minus_mu[:, None, None, :]
+            self.grid1d.grid, data=V_minus_mu.detach()[:, None, None, :]
         )
         self.n = qp.grid.FieldR(self.grid1d.grid, data=n[:, None, None, :])
 
