@@ -1,0 +1,43 @@
+functional:
+  load-file: params-5layer.dat
+  layers:
+  - n-weights: [5, 3]
+    n-outputs: 10
+    hidden-sizes: [30, 30]
+    activation: gelu
+    basis: {type: cspline, r_max: 2.0, n_basis: 10, use_local: True, use_gradient: True}
+  - n-weights: [5, 3]
+    n-outputs: 10
+    hidden-sizes: [30, 30]
+    activation: gelu
+    basis: {type: cspline, r_max: 2.0, n_basis: 10, use_local: True}
+  - n-weights: [5, 3]
+    n-outputs: 10
+    hidden-sizes: [30, 30]
+    activation: gelu
+    basis: {type: cspline, r_max: 4.0, n_basis: 10, use_local: True}
+  - n-weights: [5, 3]
+    n-outputs: 10
+    hidden-sizes: [30, 30]
+    activation: gelu
+    basis: {type: cspline, r_max: 4.0, n_basis: 10, use_local: True}
+  - n-weights: [5, 3]
+    n-outputs: 1
+    hidden-sizes: [30, 30]
+    activation: gelu
+    basis: {type: cspline, r_max: 8.0, n_basis: 10, use_local: True}
+
+data:
+  filenames: random_data/*.h5
+  train-fraction: 0.8
+
+train:
+  loss-curve: loss-5layer.dat
+  save-file: params-5layer.dat
+  save-interval: 30
+  epochs: 3000
+  batch-size: 400
+  energy-loss-scale: 1.0
+  method: Adam
+  lr: 1.0E-3
+  weight-decay: 1.0E-3
