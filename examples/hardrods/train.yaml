@@ -4,10 +4,7 @@ functional:
   - n-weights: [3, 2]
     n-outputs: 1
     hidden-sizes: [30, 30]
-    basis:
-      type: cspline
-      r_max: 2.0
-      n_basis: 10
+    weight-functions: {type: cspline, r-max: 2.0, n-basis: 10}
 
 data:
   filenames: random_data/*.h5
@@ -17,7 +14,7 @@ train:
   loss-curve: loss.dat
   save-file: params.dat
   save-interval: 30
-  epochs: 3000
+  epochs: 1000
   batch-size: 400
   energy-loss-scale: 1.0
   method: Adam

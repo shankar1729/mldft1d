@@ -81,7 +81,7 @@ class Linear(torch.nn.Module):
             torch.nn.init.uniform_(self.bias, -bound, bound)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        result = torch.tensordot(self.weight.to(x.dtype), x, dims=1)
+        result = torch.tensordot(self.weight, x, dims=1)
         if self.bias is not None:
             result += self.bias.view((self.n_out,) + (1,) * (len(x.shape) - 1))
         return result

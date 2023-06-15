@@ -88,18 +88,17 @@ def run(
                 if isinstance((functional := dft.functionals[-1]), nn.Functional):
                     for i_layer, layer in enumerate(functional.layers):
                         plt.figure()
-                        w_tilde = layer.get_w_tilde(
-                            grid1d.grid, n_dim_tot=3, suppress_local=True
-                        )
+                        w_tilde = layer.get_w_tilde(grid1d.grid, n_dim_tot=3)
                         w = torch.fft.irfft(w_tilde).real / dz
-                        for label, style, w_set in zip(
+                        for label, style, w_set, n_nonlocal in zip(
                             ("Even", "Odd"),
                             ("r", "b"),
                             w.detach().to(qp.rc.cpu).split(layer.n_weights, dim=1),
+                            layer.n_nonlocal,
                         ):
                             w_np = w_set.flatten(0, 1).numpy()
                             label = f"{label} weights"
-                            for i_w, w_i in enumerate(w_np):
+                            for i_w, w_i in enumerate(w_np[:n_nonlocal]):
                                 plt.plot(z1d, w_i, style, label=("" if i_w else label))
                         plt.xlim(0, 0.5 * L)
                         plt.xlabel("$z$")

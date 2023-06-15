@@ -89,13 +89,13 @@ class Functional(torch.nn.Module):  # type: ignore
     def get_energy(self, n: qp.grid.FieldR) -> torch.Tensor:
         channels = n[None]
         for layer in self.layers:
-            channels = layer.get(channels)
+            channels = layer.compute(channels)
         return n ^ channels[0]
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
         channels = n[None]
         for layer in self.layers:
-            channels = layer.get_bulk(channels)
+            channels = layer.compute_bulk(channels)
         return n * channels[0]
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:
