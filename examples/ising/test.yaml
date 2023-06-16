@@ -10,11 +10,27 @@ Vshape:
 lbda: -3.0
 
 functionals:
-  Exact:
+  Exact-T0.5:
     ising-exact:
-      T: 0.5
       J: -1.0
-  ML:
+      T: 0.5
+  ML-T0.5:
     ising-ml:
+      T: 0.5
       load_file: gaussian/params.dat
-
+  Exact-T1:
+    ising-exact:
+      J: -1.0
+      T: 1.0
+  ML-T1:
+    ising-ml:
+      T: 1.0
+      load_file: gaussian/params.dat
+  Exact-T2:
+    ising-exact:
+      J: -1.0
+      T: 2.0
+  ML-T2:
+    ising-ml:
+      T: 2.0
+      load_file: gaussian/params.dat

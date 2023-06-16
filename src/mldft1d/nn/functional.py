@@ -3,7 +3,7 @@ import qimpy as qp
 import torch
 import os
 from mpi4py import MPI
-from typing import Optional
+from typing import Optional, Sequence
 from qimpy.utils.dict import key_cleanup
 from .layer import Layer
 
@@ -12,20 +12,35 @@ class Functional(torch.nn.Module):  # type: ignore
     """Machine-learned DFT in 1D."""
 
     layers: torch.nn.ModuleList  #: List of layers
+    attr_names: tuple[str, ...]  #: Names of scalar attributes to use as inputs
+    attrs: torch.Tensor  #: Values of scalar attributes used as inputs
 
     def __init__(
         self,
         comm: MPI.Comm,
         *,
         layers: list[dict],
+        attr_names: Sequence[str] = tuple(),
+        attrs: Optional[Sequence[float]] = None,
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
 
+        # Setup scalar attributes:
+        self.attr_names = tuple(attr_names)
+        if attrs is None:
+            self.attrs = torch.zeros(len(attr_names), device=qp.rc.device)
+        else:
+            assert len(attrs) == len(attr_names)
+            self.attrs = torch.tensor(attrs, device=qp.rc.device, dtype=torch.double)
+
+        # Setup layers:
         self.layers = torch.nn.ModuleList()
         n_outputs_prev = 1
         for layer_params in layers:
-            merge_and_check_dicts(layer_params, dict(n_inputs=n_outputs_prev))
+            merge_and_check_dicts(
+                layer_params, dict(n_inputs=n_outputs_prev, n_attrs=len(self.attrs))
+            )
             layer = Layer(**layer_params)
             self.layers.append(layer)
             n_outputs_prev = layer.f.n_out
@@ -81,6 +96,7 @@ class Functional(torch.nn.Module):  # type: ignore
         """Save parameters to specified filename."""
         params = dict(
             layers=[layer.asdict() for layer in self.layers],
+            attr_names=self.attr_names,
             state=self.state_dict(),
         )
         if comm.rank == 0:
@@ -89,13 +105,13 @@ class Functional(torch.nn.Module):  # type: ignore
     def get_energy(self, n: qp.grid.FieldR) -> torch.Tensor:
         channels = n[None]
         for layer in self.layers:
-            channels = layer.compute(channels)
+            channels = layer.compute(channels, self.attrs)
         return n ^ channels[0]
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
         channels = n[None]
         for layer in self.layers:
-            channels = layer.compute_bulk(channels)
+            channels = layer.compute_bulk(channels, self.attrs)
         return n * channels[0]
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:

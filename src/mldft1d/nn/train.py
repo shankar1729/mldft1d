@@ -65,6 +65,9 @@ class Trainer(torch.nn.Module):  # type: ignore
 
     def forward(self, data: Data) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute loss function for one complete perturbation data-set"""
+        # Update scalar attributes from current data set:
+        for i_attr, attr_name in enumerate(self.functional.attr_names):
+            self.functional.attrs[i_attr] = data.attrs[attr_name]
         # Compute energy and gradient errors:
         data.n.data.requires_grad = True
         data.n.data.grad = None

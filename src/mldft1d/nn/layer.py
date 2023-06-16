@@ -17,6 +17,7 @@ class Layer(torch.nn.Module):  # type: ignore
     n_nonlocal: tuple[int, int]  #: Number of nonlocal even and odd weight functions
     i_odd_pair: torch.Tensor  #: Indices of distinct pairs of odd weighted densities
     n_irred: int  #: Number of irreducible scalar combinations of weighted densities
+    n_attrs: int  #: Number of scalar attributes input to `f`
     n_inputs: int  #: Number of input channels to layer
     coefficients_local: Optional[Linear]  #: Linear combination of local input/gradients
     weight_functions: WeightFunctions  #: Trainable weight functions
@@ -28,6 +29,7 @@ class Layer(torch.nn.Module):  # type: ignore
         n_weights: tuple[int, int],
         use_local: bool = False,
         use_gradient: bool = False,
+        n_attrs: int,
         n_inputs: int,
         n_outputs: int,
         weight_functions: dict,
@@ -47,6 +49,7 @@ class Layer(torch.nn.Module):  # type: ignore
         )
         self.i_odd_pair = get_pair_indices(n_weights_odd)
         self.n_irred = n_weights_even + len(self.i_odd_pair)
+        self.n_attrs = n_attrs
         self.n_inputs = n_inputs
         self.weight_functions = make_weight_functions(
             **qp.utils.dict.key_cleanup(weight_functions),
@@ -57,7 +60,7 @@ class Layer(torch.nn.Module):  # type: ignore
             if (use_local or use_gradient)
             else None
         )
-        self.f = Function(self.n_irred, n_outputs, hidden_sizes, activation)
+        self.f = Function(self.n_irred + n_attrs, n_outputs, hidden_sizes, activation)
 
     def asdict(self) -> dict:
         """Serialize parameters to dict."""
@@ -65,6 +68,7 @@ class Layer(torch.nn.Module):  # type: ignore
             n_weights=self.n_weights,
             use_local=self.use_local,
             use_gradient=self.use_gradient,
+            n_attrs=self.n_attrs,
             n_inputs=self.n_inputs,
             n_outputs=self.f.n_out,
             weight_functions=self.weight_functions.asdict(),
@@ -105,21 +109,25 @@ class Layer(torch.nn.Module):  # type: ignore
             w_even = torch.cat((w_even, w_local), dim=1)
         return w_even
 
-    def compute(self, n: qp.grid.FieldR) -> qp.grid.FieldR:
+    def compute(self, n: qp.grid.FieldR, attrs: torch.Tensor) -> qp.grid.FieldR:
         w_tilde = self.get_w_tilde(n.grid, len(n.data.shape) + 1)
         n_bar = n.convolve(w_tilde, "i..., iw... -> w...")
         n_even, n_odd = n_bar.data.split(self.n_weights)
         n_odd_sq = (n_odd[:, None] * n_odd[None]).flatten(0, 1)[self.i_odd_pair]
-        scalars = torch.cat((n_even, n_odd_sq), dim=0)
-        return qp.grid.FieldR(n.grid, data=self.f(scalars))
+        inputs = [n_even, n_odd_sq]
+        if self.n_attrs:
+            inputs.append(repeat_end(attrs, n_even.shape[1:]))
+        return qp.grid.FieldR(n.grid, data=self.f(torch.cat(inputs, dim=0)))
 
-    def compute_bulk(self, n: torch.Tensor) -> torch.Tensor:
+    def compute_bulk(self, n: torch.Tensor, attrs: torch.Tensor) -> torch.Tensor:
         n_even = torch.einsum("i..., iw -> w...", n, self.get_w_zero_even())
         n_odd_sq = torch.zeros(
             (len(self.i_odd_pair),) + n.shape[1:], device=n.device, dtype=n.dtype
         )
-        scalars = torch.cat((n_even, n_odd_sq), dim=0)
-        return self.f(scalars)
+        inputs = [n_even, n_odd_sq]
+        if self.n_attrs:
+            inputs.append(repeat_end(attrs, n_even.shape[1:]))
+        return self.f(torch.cat(inputs, dim=0))
 
     @cache
     def Gz(self, grid: qp.grid.Grid) -> torch.Tensor:
@@ -136,3 +144,9 @@ def get_pair_indices(N: int) -> torch.Tensor:
     index = torch.arange(N, dtype=torch.long, device=qp.rc.device)
     i, j = torch.where(index[:, None] <= index[None, :])
     return i * N + j
+
+
+def repeat_end(x: torch.Tensor, shape: tuple[int, ...]) -> torch.Tensor:
+    """Repeat `x` with dimensions `shape` at the end,
+    with overall result having shape `x.shape + shape`."""
+    return x.view(x.shape + (1,) * len(shape)).tile(shape)
