@@ -23,15 +23,18 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
         grid1d: Grid1D,
         n_bulk: float,
         name: str,
+        n_iterations: int = 1000,
+        energy_threshold: float = 1e-9,
+        grad_threshold: float = 1e-8,
     ) -> None:
         grid_comm = grid1d.grid.comm
         super().__init__(
             comm=(qp.rc.MPI.COMM_SELF if (grid_comm is None) else grid_comm),
             checkpoint_in=qp.utils.CpPath(),
             name=name,
-            n_iterations=1000,
-            energy_threshold=1e-9,
-            extra_thresholds={"|grad|": 1e-8},
+            n_iterations=n_iterations,
+            energy_threshold=energy_threshold,
+            extra_thresholds={"|grad|": grad_threshold},
             method="cg",
             n_consecutive=2,
         )
