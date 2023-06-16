@@ -63,13 +63,13 @@ class Exact:
 
     def bulk_potential(self, n: torch.Tensor) -> torch.Tensor:
         """Solution of potential from Eq. 22 for a spatially uniform n."""
-        return -self.T * torch.log(
+        return self.J - self.T * torch.log(
             self.F(n, n) ** 2 / (self.e**2 * (1.0 - n.square()))
         )
 
     def exact_potential(self, n: torch.Tensor) -> torch.Tensor:
         """Solution of potential from Eq. 22 for inhomogeneous n."""
-        return -self.T * torch.log(
+        return self.J - self.T * torch.log(
             self.F(n, torch.roll(n, +1, dims=-1))
             * self.F(n, torch.roll(n, -1, dims=-1))
             / (self.e**2 * (1.0 - n.square()))
