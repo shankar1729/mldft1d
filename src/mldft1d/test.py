@@ -28,6 +28,7 @@ def run(
     lbda: float,
     functionals: dict,
     run_name: str,
+    n_bulk_range: tuple[float, float] = (0.0, 1.0),
     **dft_common_args,
 ):
     # Create grid and external potential:
@@ -65,7 +66,7 @@ def run(
 
         # Compare bulk free energy densities:
         plt.figure(2)
-        n_bulks = torch.linspace(0.0, 1.0, 101, device=qp.rc.device)
+        n_bulks = torch.linspace(*n_bulk_range, 101, device=qp.rc.device)
         for dft_name, dft in dfts.items():
             if isinstance(dft, Minimizer):
                 f_bulks = dft.functionals[-1].get_energy_bulk(n_bulks)
