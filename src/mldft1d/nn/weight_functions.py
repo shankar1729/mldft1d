@@ -6,7 +6,7 @@ from scipy.special import hermite, loggamma
 from functools import cache
 from abc import abstractmethod
 from typing import Protocol
-from .function import Linear
+from .function import Function, Linear
 
 
 class WeightFunctions(Protocol):
@@ -19,6 +19,37 @@ class WeightFunctions(Protocol):
         """Compute weight functions with shape `(n_functions,) + G.shape`.
         Here, `n_functions` is the number of trainable functions,
         which must be one of the keyword inputs to __init__."""
+
+
+class NN(torch.nn.Module):
+    """Neural network weight functions."""
+
+    sigma: float  # Gaussian width in real space (to regularize high G behavior)
+    function: Function
+
+    def __init__(
+        self,
+        *,
+        n_functions: int,
+        sigma: float,
+        hidden_sizes: list[int],
+        activation: str = "softplus",
+    ) -> None:
+        super().__init__()
+        self.sigma = sigma
+        self.function = Function(1, n_functions, hidden_sizes, activation)
+
+    def asdict(self) -> dict:
+        return dict(
+            type="nn",
+            sigma=self.sigma,
+            hidden_sizes=self.function.n_hidden,
+            activation=self.function.activation.__class__.__name__.lower(),
+        )
+
+    def __call__(self, G: torch.Tensor) -> torch.Tensor:
+        sigmaGsq = (self.sigma * G[None]).square()
+        return self.function(sigmaGsq) * torch.exp(-0.5 * sigmaGsq)
 
 
 class Gaussian(torch.nn.Module):
@@ -154,6 +185,7 @@ class Cspline(Basis):
 
 make_weight_functions_map: dict[str, type] = {
     "gaussian": Gaussian,
+    "nn": NN,
     "hermite": Hermite,
     "well": Well,
     "cspline": Cspline,

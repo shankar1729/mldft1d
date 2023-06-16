@@ -20,3 +20,6 @@ functionals:
   ML-gaussian:
     hardrods-ml:
       load_file: gaussian/params.dat
+  ML-nn:
+    hardrods-ml:
+      load_file: nn/params.dat
