@@ -1,21 +1,21 @@
 functional:
-  load-file: params-gauss.dat
+  load-file: params.dat
   layers:
-  - n-weights: [6, 4]
+  - n-weights: [5, 3]
     n-outputs: 1
     hidden-sizes: [30, 30, 30]
     activation: gelu
     use-local: True
     use-gradient: True
-    weight-functions: {type: gaussian, sigma_max: 5.0, degree: 1}
+    weight-functions: {type: cspline, r-max: 4.0, n-basis: 10}
 
 data:
-  filenames: random_data/*.h5
+  filenames: ../../random_data/*.h5
   train-fraction: 0.8
 
 train:
-  loss-curve: loss-gauss.dat
-  save-file: params-gauss.dat
+  loss-curve: loss.dat
+  save-file: params.dat
   save-interval: 30
   epochs: 1000
   batch-size: 400

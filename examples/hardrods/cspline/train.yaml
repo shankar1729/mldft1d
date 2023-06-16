@@ -7,7 +7,7 @@ functional:
     weight-functions: {type: cspline, r-max: 2.0, n-basis: 10}
 
 data:
-  filenames: random_data/*.h5
+  filenames: ../random_data/*.h5
   train-fraction: 0.8
 
 train:

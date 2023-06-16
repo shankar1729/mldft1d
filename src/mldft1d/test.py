@@ -96,9 +96,9 @@ def run(
                             w.detach().to(qp.rc.cpu).split(layer.n_weights, dim=1),
                             layer.n_nonlocal,
                         ):
-                            w_np = w_set.flatten(0, 1).numpy()
+                            w_np = w_set[:, :n_nonlocal].flatten(0, 1).numpy()
                             label = f"{label} weights"
-                            for i_w, w_i in enumerate(w_np[:n_nonlocal]):
+                            for i_w, w_i in enumerate(w_np):
                                 plt.plot(z1d, w_i, style, label=("" if i_w else label))
                         plt.xlim(0, 0.5 * L)
                         plt.xlabel("$z$")

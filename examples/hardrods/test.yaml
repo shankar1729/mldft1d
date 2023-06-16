@@ -14,9 +14,9 @@ functionals:
   Exact:
     hardrods-exact:
       R: 0.5
-  ML:
+  ML-cspline:
     hardrods-ml:
-      load_file: params.dat
-  ML-gauss:
+      load_file: cspline/params.dat
+  ML-gaussian:
     hardrods-ml:
-      load_file: params-gauss.dat
+      load_file: gaussian/params.dat
