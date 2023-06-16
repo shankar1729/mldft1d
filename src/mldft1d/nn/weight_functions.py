@@ -1,6 +1,7 @@
 import torch
 import qimpy as qp
 import numpy as np
+from torch.nn.parameter import Parameter
 from scipy.special import hermite, loggamma
 from functools import cache
 from abc import abstractmethod
@@ -18,6 +19,40 @@ class WeightFunctions(Protocol):
         """Compute weight functions with shape `(n_functions,) + G.shape`.
         Here, `n_functions` is the number of trainable functions,
         which must be one of the keyword inputs to __init__."""
+
+
+class Gaussian(torch.nn.Module):
+    """Gaussian x polynomial weight functions."""
+
+    degree: int  #: degree of polynomial in G^2 multiplying Gaussian
+    sigma_max: float  #: maximum value of sigma in Gaussian
+    coefficients: torch.Tensor  #: Trainable polynomial coefficients and sigma
+
+    def __init__(self, *, n_functions: int, degree: int, sigma_max: float) -> None:
+        super().__init__()
+        self.degree = degree
+        self.sigma_max = sigma_max
+        self.coefficients = Parameter(
+            torch.empty((n_functions, degree + 2), device=qp.rc.device)
+        )
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        torch.nn.init.uniform_(self.coefficients, -1.0, 1.0)
+
+    def asdict(self) -> dict:
+        return dict(type="gaussian", degree=self.degree, sigma_max=self.sigma_max)
+
+    def __call__(self, G: torch.Tensor) -> torch.Tensor:
+        coefficients, Sigma = self.coefficients.split((self.degree + 1, 1), dim=1)
+        bcast_shape = (-1,) + (1,) * len(G.shape)
+        sigma = self.sigma_max * torch.special.expit(Sigma).view(bcast_shape)
+        sigmaGsq = (sigma * G[None]).square()
+        powers = torch.arange(self.degree + 1, device=qp.rc.device).view(bcast_shape)
+        polynomial = torch.einsum(
+            "fp, fp... -> f...", coefficients, sigmaGsq[:, None] ** powers
+        )
+        return torch.exp(-0.5 * sigmaGsq) * polynomial
 
 
 class Basis(torch.nn.Module):
@@ -118,6 +153,7 @@ class Cspline(Basis):
 
 
 make_weight_functions_map: dict[str, type] = {
+    "gaussian": Gaussian,
     "hermite": Hermite,
     "well": Well,
     "cspline": Cspline,

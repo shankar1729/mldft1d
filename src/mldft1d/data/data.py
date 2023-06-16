@@ -60,7 +60,7 @@ class Data:
         attrs = self.attrs
         L = self.grid1d.L
         n_perturbations = self.n_perturbations
-        return f"hardrods1d.Data({L=:.2f}, {n_perturbations=}, {attrs=})"
+        return f"mldft1d.data.Data({L=:.2f}, {n_perturbations=}, {attrs=})"
 
 
 def fuse_data(data_arr: Sequence[Data]) -> List[Data]:

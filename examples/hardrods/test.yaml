@@ -17,3 +17,6 @@ functionals:
   ML:
     hardrods-ml:
       load_file: params.dat
+  ML-gauss:
+    hardrods-ml:
+      load_file: params-gauss.dat

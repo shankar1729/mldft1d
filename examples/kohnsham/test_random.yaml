@@ -19,6 +19,6 @@ functionals:
   ML-3layer:
     kohnsham-ml:
       load_file: params-3layer.dat
-  ML-5layer:
+  ML-gauss:
     kohnsham-ml:
-      load_file: params-5layer.dat
+      load_file: params-gauss.dat
