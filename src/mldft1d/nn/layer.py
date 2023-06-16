@@ -110,8 +110,8 @@ class Layer(torch.nn.Module):  # type: ignore
         n_bar = n.convolve(w_tilde, "i..., iw... -> w...")
         n_even, n_odd = n_bar.data.split(self.n_weights)
         n_odd_sq = (n_odd[:, None] * n_odd[None]).flatten(0, 1)[self.i_odd_pair]
-        scalars = qp.grid.FieldR(n.grid, data=torch.cat((n_even, n_odd_sq), dim=0))
-        return qp.grid.FieldR(n.grid, data=self.f(scalars.data))
+        scalars = torch.cat((n_even, n_odd_sq), dim=0)
+        return qp.grid.FieldR(n.grid, data=self.f(scalars))
 
     def compute_bulk(self, n: torch.Tensor) -> torch.Tensor:
         n_even = torch.einsum("i..., iw -> w...", n, self.get_w_zero_even())
