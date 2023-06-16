@@ -1,5 +1,5 @@
-__all__ = ["Exact", "make_dft"]
+__all__ = ["Exact", "HomogeneousIsing", "make_dft"]
 
 
-from .exact import Exact
+from .exact import Exact, HomogeneousIsing
 from . import make_dft

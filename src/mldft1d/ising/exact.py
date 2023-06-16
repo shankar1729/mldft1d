@@ -3,6 +3,7 @@ import numpy as np
 from .. import Grid1D
 from scipy.optimize import fsolve
 from typing import Optional
+from dataclasses import dataclass
 import torch
 
 
@@ -43,13 +44,15 @@ class Exact:
 
         # Compute energy by numerically integrating exact potential = -dEint/dn:
         energy = self.energy
-        n_ref = 0.0  # define unpolarized system to have zero energy
         n_steps = 100  # number of integration steps
-        dn = (n - n_ref) / n_steps
+        dn = (n - self.n_bulk) / n_steps
         i_step = torch.arange(n_steps, device=qp.rc.device) + 0.5  # interval midpoints
-        n_path = n_ref + torch.outer(i_step, dn)
+        n_path = self.n_bulk + torch.outer(i_step, dn)
         V_path = self.exact_potential(n_path)
-        energy["Int"] = (V_path @ dn).sum().item() * (-self.grid1d.dz)  # internal
+        bulk_model = HomogeneousIsing(self.T, self.J)
+        L = self.grid1d.L
+        E_bulk = L * bulk_model.get_energy_bulk(torch.tensor(self.n_bulk)).item()
+        energy["Int"] = E_bulk + (V_path @ dn).sum().item() * (-self.grid1d.dz)
         energy["Ext"] = ((self.V - self.mu) ^ self.n).sum().item()
         return energy
 
@@ -96,3 +99,22 @@ class Exact:
         V = self.V.data[0, 0]
         V_error = self.exact_potential(n) - (V - self.mu)
         return V_error.to(qp.rc.cpu).numpy()
+
+
+@dataclass
+class HomogeneousIsing:
+    """Exact free energy of homogeneous Ising model in 1D."""
+
+    T: float
+    J: float
+
+    def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
+        e = np.exp(-self.J / self.T)
+        n_sq = n.square()
+        sqrt_term = torch.sqrt(e - (e - 1.0) * n_sq)
+        denominator = torch.sqrt(1.0 - n_sq)
+        return (
+            -0.5 * self.J
+            - 2 * self.T * torch.log((1 + sqrt_term) / denominator)
+            - n * (-self.J - 2 * self.T * torch.log((n + sqrt_term) / denominator))
+        )
