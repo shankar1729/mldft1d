@@ -1,16 +1,17 @@
 import qimpy as qp
-import numpy as np
 import torch
 from .grid1d import Grid1D
 from .protocols import Functional, get_mu
-from typing import Sequence, Optional
+from typing import Sequence, Optional, Callable
 
 
 class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
 
     functionals: Sequence[Functional]  #: Pieces of the DFT functional
     grid1d: Grid1D
-    logn: qp.grid.FieldR  #: State of the DFT (effectively local mu)
+    state: qp.grid.FieldR  #: Internal state of the DFT from which density is calculated
+    state_to_n: Callable  #: Mapping from independent-variable `state` to density `n`
+    n_to_state: Callable  #: Mapping from density `n` to independent-variable `state`
     n_bulk: float  #: Bulk number density
     mu: float  #: Bulk chemical potential
     V: qp.grid.FieldR  #: External potential
@@ -26,6 +27,8 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
         n_iterations: int = 1000,
         energy_threshold: float = 1e-9,
         grad_threshold: float = 1e-8,
+        state_to_n: Callable = torch.exp,
+        n_to_state: Callable = torch.log,
     ) -> None:
         grid_comm = grid1d.grid.comm
         super().__init__(
@@ -42,28 +45,30 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
         self.grid1d = grid1d
         self.n_bulk = n_bulk
         self.mu = get_mu(functionals, n_bulk)
-        self.logn = qp.grid.FieldR(
-            grid1d.grid, data=torch.full_like(grid1d.z, np.log(self.n_bulk))
+        self.state = qp.grid.FieldR(
+            grid1d.grid, data=n_to_state(torch.full_like(grid1d.z, self.n_bulk))
         )
-        self.V = self.logn.zeros_like()
+        self.state_to_n = state_to_n
+        self.n_to_state = n_to_state
+        self.V = self.state.zeros_like()
         self.energy = qp.Energy()
 
     @property
     def n(self) -> qp.grid.FieldR:
-        """Get current density (from self.logn)"""
-        return self.logn.exp()
+        """Get current density from `state`"""
+        return qp.grid.FieldR(self.grid1d.grid, data=self.state_to_n(self.state.data))
 
     @n.setter
     def n(self, n_in: qp.grid.FieldR) -> None:
-        self.logn = n_in.log()
+        self.state = qp.grid.FieldR(self.grid1d.grid, data=self.n_to_state(n_in.data))
 
     def step(self, direction: qp.grid.FieldR, step_size: float) -> None:
-        self.logn += step_size * direction
+        self.state += step_size * direction
 
     def compute(self, state, energy_only: bool) -> None:  # type: ignore
         if not energy_only:
-            self.logn.data.requires_grad = True
-            self.logn.data.grad = None
+            self.state.data.requires_grad = True
+            self.state.data.grad = None
 
         n = self.n
         energy = self.energy
@@ -76,11 +81,11 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
         if not energy_only:
             E = state.energy.sum_tensor()
             assert E is not None
-            E.backward()  # derivative -> self.logn.data.grad
-            state.gradient = qp.grid.FieldR(n.grid, data=self.logn.data.grad)
+            E.backward()  # derivative -> self.state.data.grad
+            state.gradient = qp.grid.FieldR(n.grid, data=self.state.data.grad)
             state.K_gradient = state.gradient
             state.extra = [state.gradient.norm()]
-            self.logn.data.requires_grad = False
+            self.state.data.requires_grad = False
 
     def random_direction(self) -> qp.grid.FieldR:
         grid = self.grid1d.grid

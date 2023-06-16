@@ -1,6 +1,7 @@
 from .. import Grid1D, Minimizer, protocols, nn
 from . import Exact
 import qimpy as qp
+import torch
 
 
 def exact(*, grid1d: Grid1D, n_bulk: float, T: float, J: float) -> protocols.DFT:
@@ -11,7 +12,7 @@ def exact(*, grid1d: Grid1D, n_bulk: float, T: float, J: float) -> protocols.DFT
 def ml(
     *, grid1d: Grid1D, n_bulk: float, load_file: str, T: float, **kwargs
 ) -> protocols.DFT:
-    """Make approximate Kohn-Sham DFT using an ML kinetic energy functional."""
+    """Make approximate Ising solver using an ML functional."""
     return Minimizer(
         functionals=[
             nn.Functional.load(
@@ -21,5 +22,7 @@ def ml(
         grid1d=grid1d,
         n_bulk=n_bulk,
         name="MLIDFT",
+        state_to_n=torch.tanh,
+        n_to_state=torch.atanh,
         **kwargs,
     )
