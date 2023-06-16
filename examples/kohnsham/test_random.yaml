@@ -9,20 +9,5 @@ Vshape:
   
 lbda: 0.5
 
-functionals:
-  Exact:
-    kohnsham-exact:
-      T: 0.01  # Fermi smearing width
-  ML-cspline-1layer:
-    kohnsham-ml:
-      load_file: cspline/1layer/params.dat
-  ML-cspline-3layer:
-    kohnsham-ml:
-      load_file: cspline/3layer/params.dat
-  ML-gaussian-1layer:
-    kohnsham-ml:
-      load_file: gaussian/1layer/params.dat
-  ML-gaussian-3layer:
-    kohnsham-ml:
-      load_file: gaussian/3layer/params.dat
+include: test_common.yaml
 
