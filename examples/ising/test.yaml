@@ -1,7 +1,7 @@
 L: 100.0
 dz: 1.0
-n_bulk: 0.0
-n_bulk_range: [-0.999, 0.999]
+n_bulk: 0.5
+n_bulk_range: [0.001, 0.999]
 
 Vshape:
   shape: gauss
@@ -10,27 +10,27 @@ Vshape:
 lbda: -3.0
 
 functionals:
-  Exact-T0.5:
+  Exact-T0.6:
     ising-exact:
       J: -1.0
-      T: 0.5
-  ML-T0.5:
+      T: 0.6
+  Exact-T1.2:
+    ising-exact:
+      J: -1.0
+      T: 1.2
+  Exact-T1.8:
+    ising-exact:
+      J: -1.0
+      T: 1.8
+  ML-T0.6:
     ising-ml:
-      T: 0.5
+      T: 0.6
       load_file: gaussian/params.dat
-  Exact-T1:
-    ising-exact:
-      J: -1.0
-      T: 1.0
-  ML-T1:
+  ML-T1.2:
     ising-ml:
-      T: 1.0
+      T: 1.2
       load_file: gaussian/params.dat
-  Exact-T2:
-    ising-exact:
-      J: -1.0
-      T: 2.0
-  ML-T2:
+  ML-T1.8:
     ising-ml:
-      T: 2.0
+      T: 1.8
       load_file: gaussian/params.dat

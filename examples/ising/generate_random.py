@@ -15,7 +15,7 @@ batch(
     dz=1.0,
     T=Choice(np.array([0.3, 0.5, 0.7, 1.0, 1.5, 2.0])),
     J=-1.0,
-    n_bulk=uniform(loc=-0.8, scale=1.6),
+    n_bulk=uniform(loc=0.1, scale=0.8),
     Vshape=dict(
         shape="random",
         sigma=loguniform(a=2.0, b=10.0),

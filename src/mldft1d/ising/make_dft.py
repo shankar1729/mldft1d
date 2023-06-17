@@ -22,7 +22,7 @@ def ml(
         grid1d=grid1d,
         n_bulk=n_bulk,
         name="MLIDFT",
-        state_to_n=torch.tanh,
-        n_to_state=torch.atanh,
+        state_to_n=torch.special.expit,
+        n_to_state=torch.special.logit,
         **kwargs,
     )

@@ -1,6 +1,7 @@
 import qimpy as qp
 import numpy as np
 from .. import Grid1D
+from ..protocols import get_mu
 from scipy.optimize import fsolve
 from typing import Optional
 from dataclasses import dataclass
@@ -25,7 +26,7 @@ class Exact:
         self.n_bulk = n_bulk
         self.T = T
         self.J = J
-        self.mu = -self.bulk_potential(torch.tensor(n_bulk, device=qp.rc.device)).item()
+        self.mu = get_mu([HomogeneousIsing(T, J)], n_bulk)
         self.n = qp.grid.FieldR(
             grid1d.grid,
             data=torch.full(grid1d.grid.shapeR_mine, n_bulk, device=qp.rc.device),
@@ -45,37 +46,31 @@ class Exact:
         # Compute energy by numerically integrating exact potential = -dEint/dn:
         energy = self.energy
         n_steps = 100  # number of integration steps
-        dn = (n - self.n_bulk) / n_steps
-        i_step = torch.arange(n_steps, device=qp.rc.device) + 0.5  # interval midpoints
-        n_path = self.n_bulk + torch.outer(i_step, dn)
-        V_path = self.exact_potential(n_path)
-        bulk_model = HomogeneousIsing(self.T, self.J)
         L = self.grid1d.L
-        E_bulk = L * bulk_model.get_energy_bulk(torch.tensor(self.n_bulk)).item()
-        energy["Int"] = E_bulk + (V_path @ dn).sum().item() * (-self.grid1d.dz)
+        n_ref = n.mean()
+        E_ref = L * HomogeneousIsing(self.T, self.J).get_energy_bulk(n_ref).item()
+        dn = (n - n_ref) / n_steps
+        i_step = torch.arange(n_steps, device=qp.rc.device) + 0.5  # interval midpoints
+        n_path = n_ref + torch.outer(i_step, dn)
+        V_path = self.exact_potential(n_path)
+        energy["Int"] = E_ref + (V_path @ dn).sum().item() * (-self.grid1d.dz)
         energy["Ext"] = ((self.V - self.mu) ^ self.n).sum().item()
         return energy
 
-    def F(self, n: torch.Tensor, n_prime: torch.Tensor) -> torch.Tensor:
-        """Function defined below Eq. 22 of Percus ref."""
+    def E(self, n: torch.Tensor, n_prime: torch.Tensor) -> torch.Tensor:
+        """Function defined below Eq. 20 of Percus ref."""
         e = self.e
-        f = e - 1.0
-        return 0.5 * ((1.0 + e) * n - f * n_prime) + torch.sqrt(
-            e + 0.25 * f * (f * (n - n_prime).square() - 4 * n * n_prime)
-        )
-
-    def bulk_potential(self, n: torch.Tensor) -> torch.Tensor:
-        """Solution of potential from Eq. 22 for a spatially uniform n."""
-        return self.J - self.T * torch.log(
-            self.F(n, n) ** 2 / (self.e**2 * (1.0 - n.square()))
+        f = e - 1
+        return ((1 + e) * n - f * n_prime - 1) + torch.sqrt(
+            (1 + f * (n + n_prime)) ** 2 - 4 * e * f * n * n_prime
         )
 
     def exact_potential(self, n: torch.Tensor) -> torch.Tensor:
-        """Solution of potential from Eq. 22 for inhomogeneous n."""
+        """Solution of potential from Eq. 20."""
         return self.J - self.T * torch.log(
-            self.F(n, torch.roll(n, +1, dims=-1))
-            * self.F(n, torch.roll(n, -1, dims=-1))
-            / (self.e**2 * (1.0 - n.square()))
+            self.E(n, torch.roll(n, +1, dims=-1))
+            * self.E(n, torch.roll(n, -1, dims=-1))
+            / (4 * self.e**2 * n * (1 - n))
         )
 
     @property
@@ -85,13 +80,13 @@ class Exact:
 
     @staticmethod
     def map(n: torch.Tensor) -> np.ndarray:
-        """Map n on (-1, 1) to independent variable on (-infty, infty)."""
-        return torch.atanh(n).to(qp.rc.cpu).numpy()
+        """Map n on (0, 1) to independent variable on (-infty, infty)."""
+        return torch.special.logit(n).to(qp.rc.cpu).numpy()
 
     @staticmethod
     def unmap(n_mapped: np.ndarray) -> torch.Tensor:
         """Inverse of `map`."""
-        return torch.tanh(torch.from_numpy(n_mapped).to(qp.rc.device))
+        return torch.special.expit(torch.from_numpy(n_mapped).to(qp.rc.device))
 
     def root_function(self, n_mapped: np.ndarray) -> np.ndarray:
         """Eq. 22 of Percus ref. cast as a root function to solve for n."""
@@ -110,11 +105,9 @@ class HomogeneousIsing:
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
         e = np.exp(-self.J / self.T)
-        n_sq = n.square()
-        sqrt_term = torch.sqrt(e - (e - 1.0) * n_sq)
-        denominator = torch.sqrt(1.0 - n_sq)
-        return (
-            -0.5 * self.J
-            - 2 * self.T * torch.log((1 + sqrt_term) / denominator)
-            - n * (-self.J - 2 * self.T * torch.log((n + sqrt_term) / denominator))
+        f = e - 1
+        E = 2 * n - 1 + torch.sqrt(1 + 4 * f * n * (1 - n))
+        return self.J * n + self.T * (
+            n * torch.log(E.square() / (4 * n * (1 - n)))
+            - torch.log(1 + E / (2 * e * (1 - n)))
         )
