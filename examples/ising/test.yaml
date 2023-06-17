@@ -1,7 +1,6 @@
 L: 100.0
 dz: 1.0
 n_bulk: 0.5
-n_bulk_range: [0.001, 0.999]
 
 Vshape:
   shape: gauss
@@ -9,28 +8,4 @@ Vshape:
 
 lbda: -3.0
 
-functionals:
-  Exact-T0.6:
-    ising-exact:
-      J: -1.0
-      T: 0.6
-  Exact-T1.2:
-    ising-exact:
-      J: -1.0
-      T: 1.2
-  Exact-T1.8:
-    ising-exact:
-      J: -1.0
-      T: 1.8
-  ML-T0.6:
-    ising-ml:
-      T: 0.6
-      load_file: gaussian/params.dat
-  ML-T1.2:
-    ising-ml:
-      T: 1.2
-      load_file: gaussian/params.dat
-  ML-T1.8:
-    ising-ml:
-      T: 1.8
-      load_file: gaussian/params.dat
+include: test_common.yaml

@@ -1,0 +1,13 @@
+L: 100.0
+dz: 1.0
+n_bulk: 0.3
+
+Vshape:
+  shape: random
+  sigma: 10.0
+  seed: 2
+  
+lbda: 1.0
+
+include: test_common.yaml
+
