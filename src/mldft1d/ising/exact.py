@@ -2,6 +2,7 @@ import qimpy as qp
 import numpy as np
 from .. import Grid1D
 from ..protocols import get_mu
+from .ideal_spin_gas import IdealSpinGas
 from scipy.optimize import fsolve
 from typing import Optional
 from dataclasses import dataclass
@@ -26,7 +27,7 @@ class Exact:
         self.n_bulk = n_bulk
         self.T = T
         self.J = J
-        self.mu = get_mu([HomogeneousIsing(T, J)], n_bulk)
+        self.mu = get_mu([IdealSpinGas(T), BulkExcess(T, J)], n_bulk)
         self.n = qp.grid.FieldR(
             grid1d.grid,
             data=torch.full(grid1d.grid.shapeR_mine, n_bulk, device=qp.rc.device),
@@ -35,8 +36,13 @@ class Exact:
         self.energy = qp.Energy()
 
     def known_part(self) -> Optional[tuple[float, qp.grid.FieldR]]:
-        """No known part: learn the entire part in ML."""
-        return None
+        """Return ideal gas as known part."""
+        n = self.n.clone()
+        n.data.requires_grad = True
+        n.data.grad = None
+        E = IdealSpinGas(self.T).get_energy(n)
+        (E / n.grid.dV).backward()  # functional derivative -> n.data.grad
+        return E.item(), qp.grid.FieldR(n.grid, data=n.data.grad)
 
     def minimize(self) -> qp.Energy:
         # Compute density:
@@ -46,9 +52,11 @@ class Exact:
         # Compute energy by numerically integrating exact potential = -dEint/dn:
         energy = self.energy
         n_steps = 100  # number of integration steps
-        L = self.grid1d.L
         n_ref = n.mean()
-        E_ref = L * HomogeneousIsing(self.T, self.J).get_energy_bulk(n_ref).item()
+        E_ref = self.grid1d.L * (
+            IdealSpinGas(self.T).get_energy_bulk(n_ref).item()
+            + BulkExcess(self.T, self.J).get_energy_bulk(n_ref).item()
+        )
         dn = (n - n_ref) / n_steps
         i_step = torch.arange(n_steps, device=qp.rc.device) + 0.5  # interval midpoints
         n_path = n_ref + torch.outer(i_step, dn)
@@ -97,8 +105,8 @@ class Exact:
 
 
 @dataclass
-class HomogeneousIsing:
-    """Exact free energy of homogeneous Ising model in 1D."""
+class BulkExcess:
+    """Exact excess free energy of homogeneous Ising model in 1D."""
 
     T: float
     J: float
@@ -108,6 +116,6 @@ class HomogeneousIsing:
         f = e - 1
         E = 2 * n - 1 + torch.sqrt(1 + 4 * f * n * (1 - n))
         return self.J * n + self.T * (
-            n * torch.log(E.square() / (4 * n * (1 - n)))
-            - torch.log(1 + E / (2 * e * (1 - n)))
+            n * torch.log(E.square() / (4 * n.square()))
+            - torch.log(1 - n + E / (2 * e))
         )

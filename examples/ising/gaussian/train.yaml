@@ -2,11 +2,9 @@ functional:
   load-file: params.dat
   attr-names: [T]  # Train with temperature dependence
   layers:
-  - n-weights: [6, 4]
+  - n-weights: [5, 3]
     n-outputs: 1
     hidden-sizes: [30, 30]
-    use_local: yes
-    use_gradient: yes
     weight-functions: {type: gaussian, sigma-max: 20.0, degree: 1}
 
 data:

@@ -73,7 +73,7 @@ def run(
             elif isinstance(dft, Schrodinger):
                 f_bulks = ThomasFermi(dft.T).get_energy_bulk(n_bulks)
             elif isinstance(dft, ising.Exact):
-                f_bulks = ising.HomogeneousIsing(dft.T, dft.J).get_energy_bulk(n_bulks)
+                f_bulks = ising.BulkExcess(dft.T, dft.J).get_energy_bulk(n_bulks)
             else:
                 continue
             plt.plot(

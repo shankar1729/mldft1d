@@ -1,5 +1,5 @@
 from .. import Grid1D, Minimizer, protocols, nn
-from . import Exact
+from . import Exact, IdealSpinGas
 import qimpy as qp
 import torch
 
@@ -15,9 +15,10 @@ def ml(
     """Make approximate Ising solver using an ML functional."""
     return Minimizer(
         functionals=[
+            IdealSpinGas(T),
             nn.Functional.load(
                 qp.rc.comm, load_file=load_file, attr_names=("T",), attrs=(T,)
-            )
+            ),
         ],
         grid1d=grid1d,
         n_bulk=n_bulk,
