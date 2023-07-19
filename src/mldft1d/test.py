@@ -33,12 +33,12 @@ def run(
 ):
     # Create grid and external potential:
     grid1d = Grid1D(L=L, dz=dz)
-    V = lbda * v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
+    V = lbda * v_shape.get(grid1d, **qp.io.dict.key_cleanup(Vshape))
 
     # Create DFTs:
     dfts = dict[str, protocols.DFT]()
     for label, dft_dict in functionals.items():
-        for dft_name, dft_args in qp.utils.dict.key_cleanup(dft_dict).items():
+        for dft_name, dft_args in qp.io.dict.key_cleanup(dft_dict).items():
             dfts[label] = make_dft_map[dft_name](
                 grid1d=grid1d, n_bulk=n_bulk, **dft_args, **dft_common_args
             )
@@ -118,11 +118,11 @@ def main() -> None:
     in_file = sys.argv[1]
     run_name = os.path.splitext(in_file)[0]
 
-    qp.utils.log_config()  # default set up to log from MPI head alone
+    qp.io.log_config()  # default set up to log from MPI head alone
     qp.log.info("Using QimPy " + qp.__version__)
     qp.rc.init()
 
-    input_dict = qp.utils.dict.key_cleanup(qp.utils.yaml.load(in_file))
+    input_dict = qp.io.dict.key_cleanup(qp.io.yaml.load(in_file))
     run(**input_dict, run_name=run_name)
 
 

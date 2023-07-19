@@ -91,7 +91,7 @@ class Schrodinger:
             (n_bands, Nz), dtype=psi_reduced.dtype, device=qp.rc.device
         )
         psi_tilde[:, iG] = psi_reduced.T
-        psi_sqr = qp.utils.abs_squared(torch.fft.fft(psi_tilde))
+        psi_sqr = qp.math.abs_squared(torch.fft.fft(psi_tilde))
         self.n.data += (wk / L) * (f @ psi_sqr)[None, None, :]
 
 

@@ -4,7 +4,7 @@ import torch
 import os
 from mpi4py import MPI
 from typing import Optional, Sequence
-from qimpy.utils.dict import key_cleanup
+from qimpy.io.dict import key_cleanup
 from .layer import Layer
 
 
@@ -118,7 +118,7 @@ class Functional(torch.nn.Module):  # type: ignore
         """Broadcast i.e. synchronize module parameters over `comm`."""
         if comm.size > 1:
             for parameter in self.parameters():
-                comm.Bcast(qp.utils.BufferView(parameter.data))
+                comm.Bcast(qp.mpi.BufferView(parameter.data))
 
     def allreduce_parameters_grad(self, comm: MPI.Comm) -> None:
         """Sum module parameter gradients over `comm`."""
@@ -126,7 +126,7 @@ class Functional(torch.nn.Module):  # type: ignore
             for i_param, parameter in enumerate(self.parameters()):
                 if parameter.grad is None:
                     parameter.grad = torch.zeros_like(parameter.data)
-                comm.Allreduce(MPI.IN_PLACE, qp.utils.BufferView(parameter.grad))
+                comm.Allreduce(MPI.IN_PLACE, qp.mpi.BufferView(parameter.grad))
 
 
 def merge_and_check_dicts(d: dict, d_in: dict) -> None:

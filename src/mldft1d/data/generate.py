@@ -33,9 +33,9 @@ def run(
     n0 = dft.n
 
     qp.log.info(f"mu = {dft.mu}")
-    V = v_shape.get(grid1d, **qp.utils.dict.key_cleanup(Vshape))
+    V = v_shape.get(grid1d, **qp.io.dict.key_cleanup(Vshape))
 
-    lbda_arr = get_lbda_arr(**qp.utils.dict.key_cleanup(lbda))
+    lbda_arr = get_lbda_arr(**qp.io.dict.key_cleanup(lbda))
     E = np.zeros_like(lbda_arr)
     n = np.zeros((len(E), len(get1D(grid1d.z))))
     E0 = np.zeros_like(E)
@@ -105,7 +105,7 @@ def batch(n_batch: int, prefix: str, **kwargs) -> None:
     will be sampled, while everything else will be forwarded to `run`
     """
     comm = qp.rc.comm
-    division = qp.utils.TaskDivision(n_tot=n_batch, n_procs=comm.size, i_proc=comm.rank)
+    division = qp.mpi.TaskDivision(n_tot=n_batch, n_procs=comm.size, i_proc=comm.rank)
     for i_batch in range(1 + division.i_start, 1 + division.i_stop):
         qp.log.warning(
             f"\n---- Generating {i_batch} of {n_batch} on process {comm.rank} ----\n"
@@ -136,11 +136,11 @@ def main() -> None:
         exit(1)
     in_file = sys.argv[1]
 
-    qp.utils.log_config()  # default set up to log from MPI head alone
+    qp.io.log_config()  # default set up to log from MPI head alone
     qp.log.info("Using QimPy " + qp.__version__)
     qp.rc.init()
 
-    input_dict = qp.utils.dict.key_cleanup(qp.utils.yaml.load(in_file))
+    input_dict = qp.io.dict.key_cleanup(qp.io.yaml.load(in_file))
     run(**input_dict)
 
 

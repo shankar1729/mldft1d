@@ -20,10 +20,8 @@ class Grid1D:
         """
         self.L = L
         self.lattice = qp.lattice.Lattice(system="orthorhombic", a=1.0, b=1.0, c=L)
-        ions = qp.ions.Ions(lattice=self.lattice)
         symmetries = qp.symmetries.Symmetries(
             lattice=self.lattice,
-            ions=ions,
             axes={"V": np.array((0.0, 0.0, 1.0))},
             # z-axis symmetry broken by ext. potential
         )

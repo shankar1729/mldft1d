@@ -212,7 +212,7 @@ def main():
     w = torch.fft.irfft(w_tilde.detach()).real / dz
     plt.plot(z_np, w.to(qp.rc.cpu).numpy().T)
     overlap = (w @ w.T) * dz
-    print(f"\nOverlap matrix:\n{qp.utils.fmt(overlap)}")
+    print(f"\nOverlap matrix:\n{qp.io.fmt(overlap)}")
     plt.xlim(0, 0.5 * L)
     plt.xlabel("$z$")
     plt.ylabel("$w(z)$")

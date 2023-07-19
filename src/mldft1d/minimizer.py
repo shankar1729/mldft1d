@@ -5,7 +5,7 @@ from .protocols import Functional, get_mu
 from typing import Sequence, Optional, Callable
 
 
-class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
+class Minimizer(qp.algorithms.Minimize[qp.grid.FieldR]):
 
     functionals: Sequence[Functional]  #: Pieces of the DFT functional
     grid1d: Grid1D
@@ -33,7 +33,7 @@ class Minimizer(qp.utils.Minimize[qp.grid.FieldR]):
         grid_comm = grid1d.grid.comm
         super().__init__(
             comm=(qp.rc.MPI.COMM_SELF if (grid_comm is None) else grid_comm),
-            checkpoint_in=qp.utils.CpPath(),
+            checkpoint_in=qp.io.CheckpointPath(),
             name=name,
             n_iterations=n_iterations,
             energy_threshold=energy_threshold,

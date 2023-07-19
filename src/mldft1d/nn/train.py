@@ -4,7 +4,7 @@ import glob
 import torch
 import numpy as np
 import qimpy as qp
-from qimpy.utils.dict import key_cleanup
+from qimpy.io.dict import key_cleanup
 from ..data import Data, random_split, random_batch_split, random_mpi_split, fuse_data
 from ..nn import Functional
 from mpi4py import MPI
@@ -85,7 +85,7 @@ class Trainer(torch.nn.Module):  # type: ignore
         lossE_total = 0.0
         lossV_total = 0.0
         n_perturbations = 0
-        n_batches = qp.utils.ceildiv(self.n_perturbations_train_tot, batch_size)
+        n_batches = qp.math.ceildiv(self.n_perturbations_train_tot, batch_size)
         for data_batch in random_batch_split(self.data_train, n_batches):
             qp.rc.comm.Barrier()
             # Step using total gradient over batch:
@@ -226,11 +226,11 @@ def main() -> None:
         exit(1)
     in_file = sys.argv[1]
 
-    qp.utils.log_config()  # default set up to log from MPI head alone
+    qp.io.log_config()  # default set up to log from MPI head alone
     qp.log.info("Using QimPy " + qp.__version__)
     qp.rc.init()
 
-    input_dict = key_cleanup(qp.utils.yaml.load(in_file))
+    input_dict = key_cleanup(qp.io.yaml.load(in_file))
     run(qp.rc.comm, **input_dict)
 
 

@@ -3,7 +3,7 @@ import numpy as np
 from mldft1d.data.generate import batch, Choice
 from scipy.stats import randint, uniform
 
-qp.utils.log_config()  # default set up to log from MPI head alone
+qp.io.log_config()  # default set up to log from MPI head alone
 qp.log.info("Using QimPy " + qp.__version__)
 qp.rc.init()
 

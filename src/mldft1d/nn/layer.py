@@ -52,7 +52,7 @@ class Layer(torch.nn.Module):  # type: ignore
         self.n_attrs = n_attrs
         self.n_inputs = n_inputs
         self.weight_functions = make_weight_functions(
-            **qp.utils.dict.key_cleanup(weight_functions),
+            **qp.io.dict.key_cleanup(weight_functions),
             n_functions=n_inputs * sum(self.n_nonlocal),
         )
         self.coefficients_local = (
