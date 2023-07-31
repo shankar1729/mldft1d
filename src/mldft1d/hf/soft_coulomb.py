@@ -26,7 +26,7 @@ if __name__ == "__main__":
 
         grid1d = Grid1D(L=30.0, dz=0.1)
 
-        # Cretae neutral charge distribution to test"
+        # Create neutral charge distribution to test"
         rho = FieldR(grid1d.grid)
         iz0 = 10
         z0 = grid1d.dz * iz0
