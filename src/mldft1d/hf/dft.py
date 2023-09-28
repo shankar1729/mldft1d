@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
 
 import torch
 import numpy as np
@@ -10,7 +10,7 @@ from qimpy.grid import FieldR, FieldH
 from qimpy.algorithms import Pulay
 
 from .. import Grid1D
-from ..protocols import get_mu
+from ..protocols import get_mu, Functional
 from ..kohnsham import ThomasFermi
 from . import SoftCoulomb, BulkExchange
 
@@ -19,6 +19,7 @@ class DFT:
     """Density-functional / Hartree-Fock solver"""
 
     grid1d: Grid1D
+    exchange_functional: Optional[Functional]  #: Ex[n], and Exx[psi] if None
     n_bulk: float  #: Bulk number density of the fluid
     n_electrons: float  #: Electron number/cell: overrides n_bulk if non-zero
     bulk_exchange: BulkExchange  #: Bulk exchange energy density
@@ -40,6 +41,7 @@ class DFT:
         self,
         grid1d: Grid1D,
         *,
+        exchange_functional: Union[str, Functional],
         n_bulk: float,
         T: float,
         n_electrons: float = 0.0,
@@ -56,7 +58,20 @@ class DFT:
         self.n = FieldR(grid1d.grid, data=torch.zeros_like(grid1d.z))
         self.V = self.n.zeros_like()
         self.energy = Energy()
-        self.scf = SCF(self)
+        if isinstance(exchange_functional, str):
+            assert exchange_functional in {"lda", "exact"}
+            if exchange_functional == "lda":
+                self.exchange_functional = self.bulk_exchange  # LDA
+            else:
+                self.exchange_functional = None  # Evaluate EXX explicitly
+        else:  # Externally specified functional, eg. for ML approximation
+            self.exchange_functional = exchange_functional
+
+        # Separate initialization for EXX and density functionals:
+        if self.exchange_functional is None:
+            raise NotImplementedError  # TODO: Initialize EXX-OEP
+        else:
+            self.scf = SCF(self)
 
         # Setup k-points:
         Nk = 2 * int(np.ceil(2 * np.pi / (self.grid1d.L * self.T)))  # assuming vF ~ 1
@@ -72,7 +87,10 @@ class DFT:
         log.info(f"Initialized common basis with {len(self.iG)} plane waves/k-point")
 
     def minimize(self) -> Energy:
-        self.scf.optimize()
+        if self.exchange_functional is None:
+            raise NotImplementedError  # TODO: Implement EXX-OEP
+        else:
+            self.scf.optimize()
         return self.energy
 
     def known_part(self) -> Optional[tuple[float, FieldR]]:
