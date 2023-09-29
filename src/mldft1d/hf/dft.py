@@ -8,6 +8,7 @@ from qimpy import log, rc, MPI, Energy
 from qimpy.io import CheckpointPath
 from qimpy.grid import FieldR, FieldH
 from qimpy.algorithms import Pulay
+from qimpy.math import abs_squared
 
 from .. import Grid1D
 from ..protocols import get_mu, Functional
@@ -28,14 +29,17 @@ class DFT:
     T: float  #: Fermi smearing width
     n: FieldR  #: Equilibrium density
     V: FieldR  #: External potential
+    scf: SCF  #: Self-consistent field algorithm (for LDA/ML cases only)
+
     energy: Energy  #: Equilibrium energy components
     eig: torch.Tensor  #: Kohn-Sham eigenvalues
     f: torch.Tensor  #: Fermi occupations
-    scf: SCF  #: Self-consistent field algorithm (for LDA/ML cases only)
-
+    C: torch.Tensor  #: Wavefunctions
     k: torch.Tensor  #: reduced k-points
     wk: float  #: k-point weights
     iG: torch.Tensor  #: basis coefficients (common for all k)
+    coulomb_tilde: torch.Tensor  #: Coulomb kernel in reciprocal space
+    ke: torch.Tensor  #: kinetic energy of each k-point and G-vector
 
     def __init__(
         self,
@@ -80,11 +84,87 @@ class DFT:
         self.wk = 4 * dk  # weight of each k-point (2 for symm, 2 for spin)
         log.info(f"Reduced {Nk} k-points to {Nk // 2} using inversion symmetry")
 
-        # Setup basis:
+        # Setup basis and kinetic energy operator:
         iG_full = grid1d.grid.get_mesh("G")[..., 2].flatten()
         Nz = len(iG_full)
         self.iG = iG_full[abs(iG_full) <= Nz // 4]  # wavefunction iG
         log.info(f"Initialized common basis with {len(self.iG)} plane waves/k-point")
+        self.ke = (
+            0.5
+            * ((self.k[:, None] + self.iG[None, :]) * (2 * np.pi / grid1d.L)).square()
+        )
+
+        # Initialize coulomb kernel for Hartree term:
+        self.coulomb_tilde = self.soft_coulomb.tilde(iG_full)
+        self.coulomb_tilde[0] = 0.0
+        print(self.coulomb_tilde)
+
+    def update_density(self) -> None:
+        """Update electron density from wavefunctions and fillings."""
+        C = self.C
+        Nk, Nbands, NG = C.shape
+        Nz = self.grid1d.grid.shape[2]
+        Cfull = torch.zeros((Nk, Nbands, Nz), dtype=torch.complex128, device=rc.device)
+        Cfull[..., self.iG] = C  # G-sphere to full reciprocal grid
+        self.n.data = (self.wk / self.grid1d.L) * torch.einsum(
+            "kb, kbz -> z", self.f, abs_squared(torch.fft.fft(Cfull))
+        )
+
+    def update_potential(self, requires_grad: bool = True) -> None:
+        """Update density-dependent energy terms and electron potential.
+        If `requires_grad` is False, only compute the energy (skip the potentials)."""
+        n = self.n
+        if requires_grad:
+            n.data.requires_grad = True
+            n.data.grad = None
+        energy = self.energy
+        energy["EH"] = 0.5 * (n ^ n.convolve(self.coulomb_tilde))
+        energy["Eext"] = n ^ self.V
+        if self.exchange_functional is not None:
+            energy["Ex"] = self.exchange_functional.get_energy(n)
+        if requires_grad:
+            E = energy.sum_tensor()
+            assert E is not None
+            E.backward()  # partial derivative dE/dn -> self.n.data.grad
+
+    def update_fillings(self):
+        """Update fillings and drop unoccupied bands in f and C."""
+        # TODO: support fixed N mode (grand-canonical only so far)
+        f = torch.special.expit((self.mu - self.eig) / self.T)  # Fermi-Dirac fillings
+        fbar = 1.0 - f
+        S = -torch.special.xlogy(f, f) - torch.special.xlogy(fbar, fbar)  # Entropy
+        self.energy["-TS"] = -self.T * S.sum() * self.wk
+        self.energy["-muN"] = -self.mu * f.sum() * self.wk
+
+        # Drop unoccupied bands
+        f_cut = 1e-8
+        Nbands = torch.where(f.max(dim=0) > f_cut)[0][-1] + 1
+        self.f = f[:, :Nbands]
+        self.C = self.C[:, :Nbands]
+
+    def update(self, requires_grad: bool = True) -> None:
+        """Update electronic system to current wavefunctions and eigenvalues.
+        This updates occupations, density, potential and electronic energy.
+        If `requires_grad` is False, only compute the energy (skip the potentials)."""
+        self.update_fillings()
+        self.update_density()
+        self.update_potential(requires_grad)
+        self.energy["KE"] = self.wk * torch.einsum(
+            "kb, kG, kbG ->", self.f, self.ke, abs_squared(self.C)
+        )
+
+    def diagonalize(self) -> None:
+        """Compute eigenvectors C and eigenvalues eig in current potential `n.grad`"""
+        H = torch.diag_embed(self.ke)
+        # Add potential operator in reciprocal space
+        assert self.n.data.grad is not None
+        Vks = self.n.data.grad.flatten() / self.grid1d.grid.dV  # convert from dE/dn
+        Vks_tilde = torch.fft.ifft(Vks)
+        Nz = len(Vks)
+        ij_grid = (self.iG[:, None] - self.iG[None, :]) % Nz
+        H += Vks_tilde[ij_grid]
+        # Diagonalize
+        self.eig, self.C = torch.linalg.eigh(H)
 
     def minimize(self) -> Energy:
         if self.exchange_functional is None:
