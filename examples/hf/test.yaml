@@ -1,7 +1,7 @@
 L: 20.0
 dz: 0.1
 T: 0.01
-n_bulk: 0.6
+n_bulk: 1.5
 
 Vshape:
   shape: rectangular

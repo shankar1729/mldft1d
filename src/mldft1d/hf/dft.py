@@ -95,9 +95,14 @@ class DFT:
         )
 
         # Initialize coulomb kernel for Hartree term:
-        self.coulomb_tilde = self.soft_coulomb.tilde(iG_full)
+        self.coulomb_tilde = self.soft_coulomb.tilde(grid1d.Gmag.flatten())
         self.coulomb_tilde[0] = 0.0
-        print(self.coulomb_tilde)
+
+        # Staring point analgous to LCAO:
+        self.n.data[...] = n_bulk
+        self.update_potential()
+        self.diagonalize()
+        self.update()
 
     def update_density(self) -> None:
         """Update electron density from wavefunctions and fillings."""
@@ -108,7 +113,7 @@ class DFT:
         Cfull[..., self.iG] = C  # G-sphere to full reciprocal grid
         self.n.data = (self.wk / self.grid1d.L) * torch.einsum(
             "kb, kbz -> z", self.f, abs_squared(torch.fft.fft(Cfull))
-        )
+        )[None, None]
 
     def update_potential(self, requires_grad: bool = True) -> None:
         """Update density-dependent energy terms and electron potential.
@@ -126,6 +131,7 @@ class DFT:
             E = energy.sum_tensor()
             assert E is not None
             E.backward()  # partial derivative dE/dn -> self.n.data.grad
+            n.data.requires_grad = False
 
     def update_fillings(self):
         """Update fillings and drop unoccupied bands in f and C."""
@@ -137,8 +143,8 @@ class DFT:
         self.energy["-muN"] = -self.mu * f.sum() * self.wk
 
         # Drop unoccupied bands
-        f_cut = 1e-8
-        Nbands = torch.where(f.max(dim=0) > f_cut)[0][-1] + 1
+        f_cut = 1e-15
+        Nbands = torch.where(f.max(dim=0).values > f_cut)[0][-1] + 1
         self.f = f[:, :Nbands]
         self.C = self.C[:, :Nbands]
 
@@ -155,7 +161,7 @@ class DFT:
 
     def diagonalize(self) -> None:
         """Compute eigenvectors C and eigenvalues eig in current potential `n.grad`"""
-        H = torch.diag_embed(self.ke)
+        H = torch.diag_embed(self.ke).to(torch.complex128)
         # Add potential operator in reciprocal space
         assert self.n.data.grad is not None
         Vks = self.n.data.grad.flatten() / self.grid1d.grid.dV  # convert from dE/dn
@@ -171,6 +177,7 @@ class DFT:
             raise NotImplementedError  # TODO: Implement EXX-OEP
         else:
             self.scf.optimize()
+        log.info(f"\nEnergy components:\n{self.energy}\n")
         return self.energy
 
     def known_part(self) -> Optional[tuple[float, FieldR]]:
@@ -213,21 +220,15 @@ class SCF(Pulay[FieldH]):
         self.initialize_kernels(q_kerker, q_metric)
 
     def cycle(self, dEprev: float) -> Sequence[float]:
-        """
-        electrons = self.system.electrons
-        eig_prev = electrons.eig[..., : electrons.fillings.n_bands]
-        eig_threshold_inner = min(1e-6, 0.1 * abs(dEprev))
-        electrons.diagonalize(
-            n_iterations=self.n_eig_steps, eig_threshold=eig_threshold_inner
-        )
-        electrons.update(self.system)  # update total energy
+        dft = self.dft
+        Nbands = dft.f.shape[1]
+        eig_prev = dft.eig[:, :Nbands]
+        dft.diagonalize()
+        dft.update()  # update total energy
         # Compute eigenvalue difference for extra convergence threshold:
-        eig_cur = electrons.eig[..., : electrons.fillings.n_bands]
-        deig = (eig_cur - eig_prev).abs()
-        deig_max = globalreduce.max(deig, electrons.comm)
+        eig_cur = dft.eig[..., :Nbands]
+        deig_max = (eig_cur - eig_prev).abs().max()
         return [deig_max]
-        """
-        return NotImplemented
 
     def initialize_kernels(self, q_kerker: float, q_metric: float) -> None:
         """Initialize preconditioner and metric."""
@@ -236,7 +237,7 @@ class SCF(Pulay[FieldH]):
         wG = grid.lattice.volume * grid.weight2H  # integration weight
         Gsq = ((iG @ grid.lattice.Gbasis.T) ** 2).sum(dim=-1)
         Gsq_reg = torch.clamp(Gsq, min=Gsq[Gsq > 0.0].min())  # regularized
-        self.K_kerker = Gsq_reg / (Gsq_reg + q_kerker**2)
+        self.K_kerker = (Gsq_reg + 0.01) / (Gsq_reg + q_kerker**2)
         self.K_metric = (1.0 + q_metric**2 / Gsq_reg) * wG
 
     @property
@@ -250,6 +251,7 @@ class SCF(Pulay[FieldH]):
     @variable.setter
     def variable(self, n_tilde: FieldH) -> None:
         self.dft.n = ~n_tilde
+        self.dft.update_potential()
 
     def precondition(self, v: FieldH) -> FieldH:
         return v.convolve(self.K_kerker)
