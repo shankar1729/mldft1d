@@ -99,7 +99,7 @@ class DFT:
         self.coulomb_tilde[0] = 0.0
 
         # Staring point analgous to LCAO:
-        self.n.data[...] = n_bulk
+        self.n.data[:] = n_bulk
         self.update_potential()
         self.diagonalize()
         self.update()
@@ -227,7 +227,7 @@ class SCF(Pulay[FieldH]):
         dft.update()  # update total energy
         # Compute eigenvalue difference for extra convergence threshold:
         eig_cur = dft.eig[..., :Nbands]
-        deig_max = (eig_cur - eig_prev).abs().max()
+        deig_max = (eig_cur - eig_prev).abs().max().item()
         return [deig_max]
 
     def initialize_kernels(self, q_kerker: float, q_metric: float) -> None:
