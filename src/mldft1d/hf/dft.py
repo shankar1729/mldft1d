@@ -57,6 +57,7 @@ class DFT:
         self.bulk_exchange = BulkExchange()
         self.soft_coulomb = SoftCoulomb()
         self.mu = get_mu([ThomasFermi(T), self.bulk_exchange], n_bulk)
+        self.n_electrons = n_electrons
         log.info(f"Set electron chemical potential: {self.mu:.5f}")
         self.T = T
         self.n = FieldR(grid1d.grid, data=torch.zeros_like(grid1d.z))
@@ -139,7 +140,9 @@ class DFT:
 
     def update_fillings(self):
         """Update fillings and drop unoccupied bands in f and C."""
-        # TODO: support fixed N mode (grand-canonical only so far)
+        if self.n_electrons:
+            raise NotImplementedError
+            # TODO: support fixed N mode (grand-canonical only so far)
         f = torch.special.expit((self.mu - self.eig) / self.T)  # Fermi-Dirac fillings
         fbar = 1.0 - f
         S = -torch.special.xlogy(f, f) - torch.special.xlogy(fbar, fbar)  # Entropy
