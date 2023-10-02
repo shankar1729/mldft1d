@@ -102,7 +102,11 @@ class DFT:
         self.n.data[:] = n_bulk
         self.update_potential()
         self.diagonalize()
+
+        mu_tmp = self.eig[:, 2].max()
+        self.mu, mu_tmp = mu_tmp, self.mu  # HACK: make sure some electrons present
         self.update()
+        self.mu, mu_tmp = mu_tmp, self.mu
 
     def update_density(self) -> None:
         """Update electron density from wavefunctions and fillings."""
@@ -141,6 +145,11 @@ class DFT:
         S = -torch.special.xlogy(f, f) - torch.special.xlogy(fbar, fbar)  # Entropy
         self.energy["-TS"] = -self.T * S.sum() * self.wk
         self.energy["-muN"] = -self.mu * f.sum() * self.wk
+
+        n_electrons = self.wk * f.sum().item()
+        log.info(
+            f"  FillingsUpdate:  mu: {self.mu:.9f}  n_electrons: {n_electrons:.6f}"
+        )
 
         # Drop unoccupied bands
         f_cut = 1e-15
