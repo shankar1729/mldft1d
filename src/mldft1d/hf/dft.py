@@ -246,26 +246,11 @@ class SCF(Pulay[FieldH]):
         self.initialize_kernels(q_kerker, q_metric)
 
     def cycle(self, dEprev: float) -> Sequence[float]:
-        """
-        # HACK
-        import matplotlib.pyplot as plt
-        from mldft1d import get1D
-        z = get1D(self.dft.grid1d.z)
-        plt.plot(z, get1D(self.dft.n.data), label="Initial")
-        """
-
         dft = self.dft
         Nbands = dft.f.shape[1]
         eig_prev = dft.eig[:, :Nbands]
         dft.diagonalize()
         dft.update()  # update total energy
-
-        """
-        # HACK
-        plt.plot(z, get1D(self.dft.n.data), label="Final")
-        plt.legend()
-        plt.show()
-        """
 
         # Compute eigenvalue difference for extra convergence threshold:
         eig_cur = dft.eig[..., :Nbands]
