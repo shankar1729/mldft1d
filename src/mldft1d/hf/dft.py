@@ -3,6 +3,7 @@ from typing import Optional, Sequence, Union
 
 import torch
 import numpy as np
+from scipy.optimize import brentq
 
 from qimpy import log, rc, MPI, Energy
 from qimpy.io import CheckpointPath
@@ -11,8 +12,7 @@ from qimpy.algorithms import Pulay
 from qimpy.math import abs_squared
 
 from .. import Grid1D
-from ..protocols import get_mu, Functional
-from ..kohnsham import ThomasFermi
+from ..protocols import Functional
 from . import SoftCoulomb, BulkExchange
 
 
@@ -22,7 +22,7 @@ class DFT:
     grid1d: Grid1D
     exchange_functional: Optional[Functional]  #: Ex[n], and Exx[psi] if None
     n_bulk: float  #: Bulk number density of the fluid
-    n_electrons: float  #: Electron number/cell: overrides n_bulk if non-zero
+    n_electrons: float  #: Electron number/cell
     bulk_exchange: BulkExchange  #: Bulk exchange energy density
     soft_coulomb: SoftCoulomb  #: 1D Soft-Coulomb interaction kernel
     mu: float  #: Bulk chemical potential (fixed when n_electrons is zero)
@@ -48,7 +48,6 @@ class DFT:
         exchange_functional: Union[str, Functional],
         n_bulk: float,
         T: float,
-        n_electrons: float = 0.0,
     ) -> None:
         comm = grid1d.grid.comm
         assert (comm is None) or (comm.size == 1)  # No MPI support here for simplicity
@@ -56,11 +55,9 @@ class DFT:
         self.n_bulk = n_bulk
         self.bulk_exchange = BulkExchange()
         self.soft_coulomb = SoftCoulomb()
-        self.mu = get_mu([ThomasFermi(T), self.bulk_exchange], n_bulk)
-        self.n_electrons = n_electrons
-        log.info(f"Set electron chemical potential: {self.mu:.5f}")
+        self.n_electrons = n_bulk * grid1d.L
         self.T = T
-        self.n = FieldR(grid1d.grid, data=torch.zeros_like(grid1d.z))
+        self.n = FieldR(grid1d.grid, data=torch.ones_like(grid1d.z) * n_bulk)
         self.V = self.n.zeros_like()
         self.energy = Energy()
         if isinstance(exchange_functional, str):
@@ -99,16 +96,6 @@ class DFT:
         self.coulomb_tilde = self.soft_coulomb.tilde(grid1d.Gmag.flatten())
         self.coulomb_tilde[0] = 0.0
 
-        # Staring point analgous to LCAO:
-        self.n.data[:] = n_bulk
-        self.update_potential()
-        self.diagonalize()
-
-        mu_tmp = self.eig[:, 2].max()
-        self.mu, mu_tmp = mu_tmp, self.mu  # HACK: make sure some electrons present
-        self.update()
-        self.mu, mu_tmp = mu_tmp, self.mu
-
     def update_density(self) -> None:
         """Update electron density from wavefunctions and fillings."""
         C = self.C
@@ -140,18 +127,34 @@ class DFT:
 
     def update_fillings(self):
         """Update fillings and drop unoccupied bands in f and C."""
-        if self.n_electrons:
-            raise NotImplementedError
-            # TODO: support fixed N mode (grand-canonical only so far)
-        f = torch.special.expit((self.mu - self.eig) / self.T)  # Fermi-Dirac fillings
+
+        def get_fillings(mu: float) -> torch.Tensor:
+            """Compute Fermi-Dirac fillings at specified `mu`."""
+            return torch.special.expit((mu - self.eig) / self.T)
+
+        def n_electron_error(mu: float) -> float:
+            f = get_fillings(mu)
+            return self.wk * f.sum().item() - self.n_electrons
+
+        def expand_range(sign: int) -> float:
+            mu_limit = self.mu
+            dmu = sign * self.T
+            while sign * n_electron_error(mu_limit) <= 0.0:
+                mu_limit += dmu
+                dmu *= 2.0
+            return mu_limit
+
+        mu_min = expand_range(-1)
+        mu_max = expand_range(+1)
+        self.mu = brentq(n_electron_error, mu_min, mu_max)
+
+        f = get_fillings(self.mu)
         fbar = 1.0 - f
         S = -torch.special.xlogy(f, f) - torch.special.xlogy(fbar, fbar)  # Entropy
         self.energy["-TS"] = -self.T * S.sum() * self.wk
-        self.energy["-muN"] = -self.mu * f.sum() * self.wk
 
-        n_electrons = self.wk * f.sum().item()
         log.info(
-            f"  FillingsUpdate:  mu: {self.mu:.9f}  n_electrons: {n_electrons:.6f}"
+            f"  FillingsUpdate:  mu: {self.mu:.9f}  n_electrons: {self.n_electrons:.6f}"
         )
 
         # Drop unoccupied bands
@@ -177,14 +180,25 @@ class DFT:
         # Add potential operator in reciprocal space
         assert self.n.data.grad is not None
         Vks = self.n.data.grad.flatten() / self.grid1d.grid.dV  # convert from dE/dn
-        Vks_tilde = torch.fft.ifft(Vks)
+        Vks_tilde = torch.fft.fft(Vks, norm="forward")
         Nz = len(Vks)
         ij_grid = (self.iG[:, None] - self.iG[None, :]) % Nz
         H += Vks_tilde[ij_grid]
         # Diagonalize
-        self.eig, self.C = torch.linalg.eigh(H)
+        self.eig, evecs = torch.linalg.eigh(H)
+        self.C = evecs.swapaxes(-2, -1)
+
+    def initialize_state(self) -> None:
+        # Staring point analgous to LCAO:
+        self.update_potential()
+        self.diagonalize()
+        self.mu = self.eig.min().item()  # initial value before update_fillings
+        self.update_fillings()
 
     def minimize(self) -> Energy:
+        if not hasattr(self, "C"):
+            self.initialize_state()
+
         if self.exchange_functional is None:
             raise NotImplementedError  # TODO: Implement EXX-OEP
         else:
@@ -210,7 +224,7 @@ class SCF(Pulay[FieldH]):
         energy_threshold: float = 1e-8,
         residual_threshold: float = 1e-7,
         n_consecutive: int = 2,
-        n_history: int = 10,
+        n_history: int = 15,
         mix_fraction: float = 0.5,
         q_kerker: float = 0.8,
         q_metric: float = 0.8,
@@ -232,11 +246,27 @@ class SCF(Pulay[FieldH]):
         self.initialize_kernels(q_kerker, q_metric)
 
     def cycle(self, dEprev: float) -> Sequence[float]:
+        """
+        # HACK
+        import matplotlib.pyplot as plt
+        from mldft1d import get1D
+        z = get1D(self.dft.grid1d.z)
+        plt.plot(z, get1D(self.dft.n.data), label="Initial")
+        """
+
         dft = self.dft
         Nbands = dft.f.shape[1]
         eig_prev = dft.eig[:, :Nbands]
         dft.diagonalize()
         dft.update()  # update total energy
+
+        """
+        # HACK
+        plt.plot(z, get1D(self.dft.n.data), label="Final")
+        plt.legend()
+        plt.show()
+        """
+
         # Compute eigenvalue difference for extra convergence threshold:
         eig_cur = dft.eig[..., :Nbands]
         deig_max = (eig_cur - eig_prev).abs().max().item()
@@ -249,7 +279,7 @@ class SCF(Pulay[FieldH]):
         wG = grid.lattice.volume * grid.weight2H  # integration weight
         Gsq = ((iG @ grid.lattice.Gbasis.T) ** 2).sum(dim=-1)
         Gsq_reg = torch.clamp(Gsq, min=Gsq[Gsq > 0.0].min())  # regularized
-        self.K_kerker = (Gsq_reg + 0.01) / (Gsq_reg + q_kerker**2)
+        self.K_kerker = Gsq_reg / (Gsq_reg + q_kerker**2)
         self.K_metric = (1.0 + q_metric**2 / Gsq_reg) * wG
 
     @property
@@ -263,6 +293,7 @@ class SCF(Pulay[FieldH]):
     @variable.setter
     def variable(self, n_tilde: FieldH) -> None:
         self.dft.n = ~n_tilde
+        self.dft.n.data.clip_(min=1.0e-15)
         self.dft.update_potential()
 
     def precondition(self, v: FieldH) -> FieldH:
