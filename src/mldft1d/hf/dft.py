@@ -97,6 +97,12 @@ class DFT:
         self.coulomb_tilde = self.soft_coulomb.tilde(grid1d.Gmag.flatten())
         self.coulomb_tilde[0] = 0.0
 
+        # Probe charge evaluation of the exchange kernel:
+        dk_cart = dk * grid1d.grid.lattice.Gbasis[:, 2].norm()
+        k_max = -np.log(np.finfo(np.float64).eps) / self.soft_coulomb.a
+        k_cart = torch.arange(dk_cart, k_max, dk_cart, device=rc.device)
+        self.Kx_G0 = 2 * self.soft_coulomb.tilde(k_cart).sum().item() / (Nk)  # TODO
+
     def to_real_space(self, C: torch.Tensor) -> torch.Tensor:
         Nk, Nbands, NG = C.shape
         Nz = self.grid1d.grid.shape[2]
@@ -210,7 +216,7 @@ class DFT:
                 q = k2 - k1
                 G = (iG + q) * Gbasis
                 K = self.soft_coulomb.tilde(G)
-                K[G == 0] = 0.0  # TODO: replace with reasonable value
+                K[G == 0] = self.Kx_G0
                 n12 = torch.einsum("ax, bx -> abx", IC1.conj(), IC2)
                 n12tilde = torch.fft.fft(n12, norm="forward")
                 Exx += torch.einsum("abG, G, a, b ->", abs_squared(n12tilde), K, f1, f2)
