@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Optional, Sequence, Union
+from itertools import chain
 
 import torch
 import numpy as np
@@ -96,15 +97,17 @@ class DFT:
         self.coulomb_tilde = self.soft_coulomb.tilde(grid1d.Gmag.flatten())
         self.coulomb_tilde[0] = 0.0
 
-    def update_density(self) -> None:
-        """Update electron density from wavefunctions and fillings."""
-        C = self.C
+    def to_real_space(self, C: torch.Tensor) -> torch.Tensor:
         Nk, Nbands, NG = C.shape
         Nz = self.grid1d.grid.shape[2]
         Cfull = torch.zeros((Nk, Nbands, Nz), dtype=torch.complex128, device=rc.device)
         Cfull[..., self.iG] = C  # G-sphere to full reciprocal grid
+        return torch.fft.ifft(Cfull, norm="forward")
+
+    def update_density(self) -> None:
+        """Update electron density from wavefunctions and fillings."""
         self.n.data = (self.wk / self.grid1d.L) * torch.einsum(
-            "kb, kbz -> z", self.f, abs_squared(torch.fft.fft(Cfull))
+            "kb, kbz -> z", self.f, abs_squared(self.to_real_space(self.C))
         )[None, None]
 
     def update_potential(self, requires_grad: bool = True) -> None:
@@ -195,6 +198,13 @@ class DFT:
         self.mu = self.eig.min().item()  # initial value before update_fillings
         self.update_fillings()
 
+    def compute_exx(self, C: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
+        k = self.k
+        IC = self.to_real_space(C)
+        for k1, IC1, f1 in zip(chain(k, -k), chain(IC, IC.conj()), chain(f, f)):
+            q = k - k1  # broadcast over all k2 in k
+            print(q)
+
     def minimize(self) -> Energy:
         if not hasattr(self, "C"):
             self.initialize_state()
@@ -262,10 +272,11 @@ class SCF(Pulay[FieldH]):
         grid = self.dft.grid1d.grid
         iG = grid.get_mesh("H").to(torch.double)  # half-space
         wG = grid.lattice.volume * grid.weight2H  # integration weight
-        Gsq = ((iG @ grid.lattice.Gbasis.T) ** 2).sum(dim=-1)
-        Gsq_reg = torch.clamp(Gsq, min=Gsq[Gsq > 0.0].min())  # regularized
-        self.K_kerker = Gsq_reg / (Gsq_reg + q_kerker**2)
-        self.K_metric = (1.0 + q_metric**2 / Gsq_reg) * wG
+        Gmag = ((iG @ grid.lattice.Gbasis.T) ** 2).sum(dim=-1).sqrt()
+        Gmag_reg = torch.clamp(Gmag, min=Gmag[Gmag > 0.0].min())  # regularized
+        invCoul = Gmag_reg**2  # self.dft.soft_coulomb.tilde(Gmag_reg) / (4 * np.pi)#
+        self.K_kerker = invCoul / (invCoul + q_kerker**2)
+        self.K_metric = (1.0 + q_metric**2 / invCoul) * wG
 
     @property
     def energy(self) -> Energy:
