@@ -201,9 +201,21 @@ class DFT:
     def compute_exx(self, C: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
         k = self.k
         IC = self.to_real_space(C)
+        grid = self.grid1d.grid
+        iG = grid.get_mesh("G")[..., 2].flatten()
+        Gbasis = grid.lattice.Gbasis[:, 2].norm()
+        Exx = torch.zeros(tuple(), device=rc.device)
         for k1, IC1, f1 in zip(chain(k, -k), chain(IC, IC.conj()), chain(f, f)):
-            q = k - k1  # broadcast over all k2 in k
-            print(q)
+            for k2, IC2, f2 in zip(k, IC, f):
+                q = k2 - k1
+                G = (iG + q) * Gbasis
+                K = self.soft_coulomb.tilde(G)
+                K[G == 0] = 0.0  # TODO: replace with reasonable value
+                n12 = torch.einsum("ax, bx -> abx", IC1.conj(), IC2)
+                n12tilde = torch.fft.fft(n12, norm="forward")
+                Exx += torch.einsum("abG, G, a, b ->", abs_squared(n12tilde), K, f1, f2)
+        wk_unreduced = 0.25 * self.wk  # without spin and symmetry weights
+        return (-0.5 * wk_unreduced * self.wk / grid.lattice.volume) * Exx
 
     def minimize(self) -> Energy:
         if not hasattr(self, "C"):
@@ -214,6 +226,7 @@ class DFT:
         else:
             self.scf.optimize()
         log.info(f"\nEnergy components:\n{self.energy}\n")
+        log.info(f"Exx = {self.compute_exx(self.C, self.f).item():25.16f} ")
         return self.energy
 
     def known_part(self) -> Optional[tuple[float, FieldR]]:
