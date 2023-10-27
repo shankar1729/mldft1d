@@ -97,11 +97,22 @@ class DFT:
         self.coulomb_tilde = self.soft_coulomb.tilde(grid1d.Gmag.flatten())
         self.coulomb_tilde[0] = 0.0
 
-        # Probe charge evaluation of the exchange kernel:
-        dk_cart = dk * grid1d.grid.lattice.Gbasis[:, 2].norm()
-        k_max = -np.log(np.finfo(np.float64).eps) / self.soft_coulomb.a
-        k_cart = torch.arange(dk_cart, k_max, dk_cart, device=rc.device)
-        self.Kx_G0 = 2 * self.soft_coulomb.tilde(k_cart).sum().item() / (Nk)  # TODO
+        # Initialize truncated kernel for exact exchange:
+        Nz_sup = Nz * Nk
+        z_sup = grid1d.dz * torch.cat(
+            (
+                torch.arange(Nz_sup // 2, device=rc.device),
+                torch.arange(Nz_sup // 2 - Nz_sup, 0, device=rc.device),
+            )
+        )
+        Ksup = self.soft_coulomb(z_sup)
+        Ksup_tilde = torch.fft.fft(Ksup).real * grid1d.dz
+        # --- split supercell kernel by integer q offsets
+        self.Kx_tilde = {0: Ksup_tilde[::Nk]}
+        for iq in range(1, Nk):
+            Kx_cur = Ksup_tilde[iq::Nk]
+            self.Kx_tilde[iq] = Kx_cur
+            self.Kx_tilde[iq - Nk] = torch.roll(Kx_cur, 1)
 
     def to_real_space(self, C: torch.Tensor) -> torch.Tensor:
         Nk, Nbands, NG = C.shape
@@ -206,22 +217,18 @@ class DFT:
 
     def compute_exx(self, C: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
         k = self.k
+        dk = (k[1] - k[0]).item()
         IC = self.to_real_space(C)
-        grid = self.grid1d.grid
-        iG = grid.get_mesh("G")[..., 2].flatten()
-        Gbasis = grid.lattice.Gbasis[:, 2].norm()
         Exx = torch.zeros(tuple(), device=rc.device)
         for k1, IC1, f1 in zip(chain(k, -k), chain(IC, IC.conj()), chain(f, f)):
             for k2, IC2, f2 in zip(k, IC, f):
-                q = k2 - k1
-                G = (iG + q) * Gbasis
-                K = self.soft_coulomb.tilde(G)
-                K[G == 0] = self.Kx_G0
+                iq = round((k2 - k1).item() / dk)
+                K = self.Kx_tilde[iq]
                 n12 = torch.einsum("ax, bx -> abx", IC1.conj(), IC2)
                 n12tilde = torch.fft.fft(n12, norm="forward")
                 Exx += torch.einsum("abG, G, a, b ->", abs_squared(n12tilde), K, f1, f2)
-        wk_unreduced = 0.25 * self.wk  # without spin and symmetry weights
-        return (-0.5 * wk_unreduced * self.wk / grid.lattice.volume) * Exx
+        wk_unreduced = dk  # without spin and symmetry weights
+        return (-0.5 * wk_unreduced * self.wk / self.grid1d.L) * Exx
 
     def minimize(self) -> Energy:
         if not hasattr(self, "C"):
