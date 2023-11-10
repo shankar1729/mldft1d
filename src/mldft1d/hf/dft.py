@@ -194,24 +194,23 @@ class DFT:
             "kb, kG, kbG ->", self.f, self.ke, abs_squared(self.C)
         )
 
-    def diagonalize(self) -> None:
+    def diagonalize(self, Vks: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute eigenvectors C and eigenvalues eig in current potential `n.grad`"""
         H = torch.diag_embed(self.ke).to(torch.complex128)
         # Add potential operator in reciprocal space
-        assert self.n.data.grad is not None
-        Vks = self.n.data.grad.flatten() / self.grid1d.grid.dV  # convert from dE/dn
         Vks_tilde = torch.fft.fft(Vks, norm="forward")
         Nz = len(Vks)
         ij_grid = (self.iG[:, None] - self.iG[None, :]) % Nz
         H += Vks_tilde[ij_grid]
         # Diagonalize
-        self.eig, evecs = torch.linalg.eigh(H)
-        self.C = evecs.swapaxes(-2, -1)
+        eig, evecs = torch.linalg.eigh(H)
+        return evecs.swapaxes(-2, -1), eig
 
     def initialize_state(self) -> None:
         # Staring point analgous to LCAO:
         self.update_potential()
-        self.diagonalize()
+        Vks = self.n.data.grad.flatten() / self.grid1d.grid.dV  # convert from dE/dn
+        self.C, self.eig = self.diagonalize(Vks)
         self.mu = self.eig.min().item()  # initial value before update_fillings
         self.update_fillings()
 
@@ -240,6 +239,15 @@ class DFT:
             self.scf.optimize()
         log.info(f"\nEnergy components:\n{self.energy}\n")
         log.info(f"Exx = {self.compute_exx(self.C, self.f).item():25.16f} ")
+        # HACK
+        Vks = self.n.data.grad.flatten().detach() / self.grid1d.grid.dV
+        Vks.requires_grad = True
+        self.C, self.eig = self.diagonalize(Vks)
+        self.update_fillings()
+        Exx = self.compute_exx(self.C, self.f)
+        Exx.backward()
+        print(Vks.grad)
+        Vks.requires_grad = False
         return self.energy
 
     def known_part(self) -> Optional[tuple[float, FieldR]]:
@@ -285,7 +293,8 @@ class SCF(Pulay[FieldH]):
         dft = self.dft
         Nbands = dft.f.shape[1]
         eig_prev = dft.eig[:, :Nbands]
-        dft.diagonalize()
+        Vks = dft.n.data.grad.flatten() / dft.grid1d.grid.dV  # convert from dE/dn
+        dft.C, dft.eig = dft.diagonalize(Vks)
         dft.update()  # update total energy
 
         # Compute eigenvalue difference for extra convergence threshold:
