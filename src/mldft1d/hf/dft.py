@@ -75,8 +75,6 @@ class DFT:
         # Separate initialization for EXX and density functionals:
         if self.exchange_functional is None:
             self.oep = OEP(self)
-            # , comm=MPI.COMM_SELF)
-            # raise NotImplementedError  # TODO: Initialize EXX-OEP
         else:
             self.scf = SCF(self)
 
@@ -143,6 +141,7 @@ class DFT:
         energy["Eext"] = n ^ self.V
         if self.exchange_functional is not None:
             energy["Ex"] = self.exchange_functional.get_energy(n)
+
         if requires_grad:
             E = energy.sum_tensor()
             assert E is not None
@@ -237,13 +236,13 @@ class DFT:
 
     def minimize(self) -> Energy:
         if not hasattr(self, "C"):
+            log.info("\n(Initializing state)\n")
             self.initialize_state()
-
         if self.exchange_functional is None:
-            log.info("\nBeginning effective potential optimizer\n")
+            log.info("\nBeginning effective-potential optimizer\n")
             self.oep.optimize()
-            # raise NotImplementedError  # TODO: Implement EXX-OEP
         else:
+            log.info("\nBeginning self-consistent field\n")
             self.scf.optimize()
         log.info(f"\nEnergy components:\n{self.energy}\n")
         log.info(f"Exx = {self.compute_exx(self.C, self.f).item():25.16f} ")

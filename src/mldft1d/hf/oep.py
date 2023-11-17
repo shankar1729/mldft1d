@@ -53,7 +53,7 @@ class OEP(Minimize[torch.Tensor]):
         )
 
     def optimize(self):
-        ansatz = self.dft.V + 0.5 * self.dft.n.convolve(self.dft.coulomb_tilde)
+        ansatz = self.dft.V  # + self.dft.n.convolve(self.dft.coulomb_tilde)
         self.Vks = ansatz.data.flatten()  # Vks ansatz
         E, gradient = self.compute_energy()
         self.finite_difference_test(gradient)
@@ -67,7 +67,7 @@ class OEP(Minimize[torch.Tensor]):
         state.energy, state.gradient = self.compute_energy()
 
     def compute_energy(self) -> tuple[Energy, torch.Tensor]:
-        Vks = self.Vks.detach()
+        Vks = self.Vks
         Vks.requires_grad = True
         Vks.grad = None
         dft = self.dft
