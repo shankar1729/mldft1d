@@ -15,6 +15,7 @@ from qimpy.math import abs_squared
 from .. import Grid1D
 from ..protocols import Functional
 from . import SoftCoulomb, BulkExchange
+from .oep import OEP
 
 
 class DFT:
@@ -31,6 +32,7 @@ class DFT:
     n: FieldR  #: Equilibrium density
     V: FieldR  #: External potential
     scf: SCF  #: Self-consistent field algorithm (for LDA/ML cases only)
+    oep: OEP
 
     energy: Energy  #: Equilibrium energy components
     eig: torch.Tensor  #: Kohn-Sham eigenvalues
@@ -72,7 +74,9 @@ class DFT:
 
         # Separate initialization for EXX and density functionals:
         if self.exchange_functional is None:
-            raise NotImplementedError  # TODO: Initialize EXX-OEP
+            self.oep = OEP(self)
+            # , comm=MPI.COMM_SELF)
+            # raise NotImplementedError  # TODO: Initialize EXX-OEP
         else:
             self.scf = SCF(self)
 
@@ -193,6 +197,8 @@ class DFT:
         self.energy["KE"] = self.wk * torch.einsum(
             "kb, kG, kbG ->", self.f, self.ke, abs_squared(self.C)
         )
+        if self.exchange_functional is None:
+            self.energy["Ex"] = self.compute_exx(self.C, self.f)
 
     def diagonalize(self, Vks: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute eigenvectors C and eigenvalues eig in current potential `n.grad`"""
@@ -234,7 +240,9 @@ class DFT:
             self.initialize_state()
 
         if self.exchange_functional is None:
-            raise NotImplementedError  # TODO: Implement EXX-OEP
+            log.info("\nBeginning effective potential optimizer\n")
+            self.oep.optimize()
+            # raise NotImplementedError  # TODO: Implement EXX-OEP
         else:
             self.scf.optimize()
         log.info(f"\nEnergy components:\n{self.energy}\n")
