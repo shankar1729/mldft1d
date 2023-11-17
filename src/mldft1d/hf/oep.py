@@ -6,10 +6,8 @@ import torch
 
 from qimpy import Energy, log, MPI
 from qimpy.algorithms import Minimize, MinimizeState
-from qimpy.algorithms._minimize_lbfgs import lbfgs
-from qimpy.algorithms._minimize_cg import cg
 
-from .dft import DFT
+from .. import hf
 
 
 class OEP(Minimize[torch.Tensor]):
@@ -17,13 +15,13 @@ class OEP(Minimize[torch.Tensor]):
     of Kohn-Sham potential
     """
 
-    dft: DFT
+    dft: hf.DFT
     Vks: torch.Tensor
     K: float  # Preconditioner
 
     def __init__(
         self,
-        dft: DFT,
+        dft: hf.DFT,
         *,
         # comm: MPI.Comm,
         n_iterations: int = 20,
@@ -61,10 +59,6 @@ class OEP(Minimize[torch.Tensor]):
         E, gradient = self.compute_energy()
         self.finite_difference_test(gradient)
         # self.minimize()
-
-    def minimize(self) -> Energy:
-        """Minimize, and return optimized energy of system"""
-        return lbfgs(self) if (self.method == "l-bfgs") else cg(self)
 
     def step(self, direction: torch.Tensor, step_size: float) -> None:
         """Move the state along `direction` by amount `step_size`"""
