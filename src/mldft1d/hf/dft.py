@@ -170,10 +170,14 @@ class DFT:
         mu_min = expand_range(-1)
         mu_max = expand_range(+1)
         self.mu = brentq(n_electron_error, mu_min, mu_max)
+        # self.mu = 3.2
 
+        FTOL = 1e-16
         f = get_fillings(self.mu)
         fbar = 1.0 - f
-        S = -torch.special.xlogy(f, f) - torch.special.xlogy(fbar, fbar)  # Entropy
+        S = -torch.special.xlogy(f, f.clamp(min=FTOL)) - torch.special.xlogy(
+            fbar, fbar.clamp(min=FTOL)
+        )  # Entropy
         self.energy["-TS"] = -self.T * S.sum() * self.wk
 
         log.info(

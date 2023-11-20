@@ -4,7 +4,7 @@ from typing import Optional, Sequence, Union
 import numpy as np
 import torch
 
-from qimpy import Energy, log, MPI
+from qimpy import log, MPI, rc
 from qimpy.algorithms import Minimize, MinimizeState
 
 from .. import hf
@@ -53,9 +53,10 @@ class OEP(Minimize[torch.Tensor]):
         )
 
     def optimize(self):
-        ansatz = self.dft.V  # + self.dft.n.convolve(self.dft.coulomb_tilde)
-        self.Vks = ansatz.data.flatten()  # Vks ansatz
-        E, gradient = self.compute_energy()
+        ansatz = self.dft.V.data + self.dft.n.convolve(self.dft.coulomb_tilde).data
+        self.Vks = ansatz.flatten()  # Vks ansatz
+        torch.random.manual_seed(0)
+        gradient = torch.randn(self.Vks.shape, device=rc.device)
         self.finite_difference_test(gradient)
         # self.minimize()
 
@@ -64,20 +65,20 @@ class OEP(Minimize[torch.Tensor]):
         self.Vks += step_size * direction
 
     def compute(self, state: MinimizeState[torch.Tensor], energy_only: bool) -> None:
-        state.energy, state.gradient = self.compute_energy()
-
-    def compute_energy(self) -> tuple[Energy, torch.Tensor]:
         Vks = self.Vks
-        Vks.requires_grad = True
-        Vks.grad = None
+        if not energy_only:
+            Vks.requires_grad = True
+            Vks.grad = None
         dft = self.dft
         dft.C, dft.eig = dft.diagonalize(Vks)
         dft.update(requires_grad=False)
         E = dft.energy.sum_tensor()
-        assert E is not None
-        E.backward()  # partial derivative dE/dVks -> self.Vks.data.grad
-        Vks.requires_grad = False
-        return dft.energy, Vks.grad.flatten().detach() / dft.grid1d.grid.dV
+        if not energy_only:
+            assert E is not None
+            E.backward()  # partial derivative dE/dVks -> self.Vks.data.grad
+            Vks.requires_grad = False
+            state.gradient = Vks.grad
+        state.energy = dft.energy
 
     def finite_difference_test(
         self, direction: torch.Tensor, step_sizes: Optional[Sequence[float]] = None
