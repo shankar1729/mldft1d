@@ -7,6 +7,8 @@ from .data import v_shape
 from .kohnsham import Schrodinger, ThomasFermi
 from typing import Callable
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+import numpy as np
 
 
 make_dft_map: dict[str, Callable[..., protocols.DFT]] = {
@@ -111,6 +113,27 @@ def run(
                         plt.ylabel("$w(z)$")
                         plt.legend()
                         plt.title(f"Weight functions in layer {i_layer} for {dft_name}")
+        plt.figure()
+        styles = ["b-", "r:"]
+        names = []
+        for (dft_name, dft), style in zip(dfts.items(), styles):
+            names.append(dft_name)
+            if isinstance(dft, hf.DFT):
+                eig = np.array(dft.eig.detach())
+                k = np.array(dft.k)
+                mu = dft.mu
+                n_plot = np.max(np.where(eig < mu), axis=1)[1] + 4
+                plt.plot(k[:, ...], eig[:, 0:n_plot] - mu, style, label=dft_name)
+        plt.xlabel("$k$")
+        plt.ylabel(r"$\epsilon_{nk}-\mu$")
+        plt.legend(
+            [
+                Line2D([0], [0], color=styles[0][0], linestyle=styles[0][1]),
+                Line2D([0], [0], color=styles[1][0], linestyle=styles[0][1]),
+            ],
+            names,
+        )
+        plt.axhline(0, color="k", linestyle="--")
         plt.show()
 
 
