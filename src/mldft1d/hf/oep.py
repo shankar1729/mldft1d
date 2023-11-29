@@ -4,7 +4,7 @@ from typing import Optional, Sequence, Union
 import numpy as np
 import torch
 
-from qimpy import log, MPI, rc
+from qimpy import log, MPI
 from qimpy.algorithms import Minimize, MinimizeState
 
 from .. import hf
@@ -25,8 +25,7 @@ class OEP(Minimize[torch.Tensor]):
         *,
         # comm: MPI.Comm,
         n_iterations: int = 20,
-        energy_threshold: float = 5e-5,
-        fmax_threshold: float = 5e-4,
+        energy_threshold: float = 1e-7,
         n_consecutive: int = 1,
         method: str = "l-bfgs",
         cg_type: str = "polak-ribiere",
@@ -35,7 +34,6 @@ class OEP(Minimize[torch.Tensor]):
         converge_on: Union[str, int] = "all",
     ) -> None:
         self.dft = dft
-        extra_thresholds = {"fmax": fmax_threshold}
         super().__init__(
             checkpoint_in=None,
             comm=MPI.COMM_SELF,
@@ -43,7 +41,7 @@ class OEP(Minimize[torch.Tensor]):
             i_iter_start=0,
             n_iterations=n_iterations,
             energy_threshold=energy_threshold,
-            extra_thresholds=extra_thresholds,
+            extra_thresholds={},
             n_consecutive=n_consecutive,
             method=method,
             cg_type=cg_type,
@@ -55,10 +53,8 @@ class OEP(Minimize[torch.Tensor]):
     def optimize(self):
         ansatz = self.dft.V.data + self.dft.n.convolve(self.dft.coulomb_tilde).data
         self.Vks = ansatz.flatten()  # Vks ansatz
-        torch.random.manual_seed(0)
-        gradient = torch.randn(self.Vks.shape, device=rc.device)
-        self.finite_difference_test(gradient)
-        # self.minimize()
+        self.minimize()
+        self.dft.n.data = self.dft.n.data.detach()
 
     def step(self, direction: torch.Tensor, step_size: float) -> None:
         """Move the state along `direction` by amount `step_size`"""
@@ -78,6 +74,7 @@ class OEP(Minimize[torch.Tensor]):
             E.backward()  # partial derivative dE/dVks -> self.Vks.data.grad
             Vks.requires_grad = False
             state.gradient = Vks.grad
+            state.K_gradient = Vks.grad  # preconditioner
         state.energy = dft.energy
 
     def finite_difference_test(

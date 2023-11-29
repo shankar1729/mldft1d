@@ -150,36 +150,15 @@ class DFT:
 
     def update_fillings(self):
         """Update fillings and drop unoccupied bands in f and C."""
-
-        def get_fillings(mu: float) -> torch.Tensor:
-            """Compute Fermi-Dirac fillings at specified `mu`."""
-            return torch.special.expit((mu - self.eig) / self.T)
-
-        def n_electron_error(mu: float) -> float:
-            f = get_fillings(mu)
-            return self.wk * f.sum().item() - self.n_electrons
-
-        def expand_range(sign: int) -> float:
-            mu_limit = self.mu
-            dmu = sign * self.T
-            while sign * n_electron_error(mu_limit) <= 0.0:
-                mu_limit += dmu
-                dmu *= 2.0
-            return mu_limit
-
-        mu_min = expand_range(-1)
-        mu_max = expand_range(+1)
-        self.mu = brentq(n_electron_error, mu_min, mu_max)
-        # self.mu = 3.2
-
+        mu = SolveNumberConstraint.apply(self.eig, self.T, self.n_electrons / self.wk)
         FTOL = 1e-16
-        f = get_fillings(self.mu)
+        f = torch.special.expit((mu - self.eig) / self.T)
         fbar = 1.0 - f
         S = -torch.special.xlogy(f, f.clamp(min=FTOL)) - torch.special.xlogy(
             fbar, fbar.clamp(min=FTOL)
         )  # Entropy
         self.energy["-TS"] = -self.T * S.sum() * self.wk
-
+        self.mu = mu.item()
         log.info(
             f"  FillingsUpdate:  mu: {self.mu:.9f}  n_electrons: {self.n_electrons:.6f}"
         )
@@ -249,16 +228,6 @@ class DFT:
             log.info("\nBeginning self-consistent field\n")
             self.scf.optimize()
         log.info(f"\nEnergy components:\n{self.energy}\n")
-        log.info(f"Exx = {self.compute_exx(self.C, self.f).item():25.16f} ")
-        # HACK
-        Vks = self.n.data.grad.flatten().detach() / self.grid1d.grid.dV
-        Vks.requires_grad = True
-        self.C, self.eig = self.diagonalize(Vks)
-        self.update_fillings()
-        Exx = self.compute_exx(self.C, self.f)
-        Exx.backward()
-        print(Vks.grad)
-        Vks.requires_grad = False
         return self.energy
 
     def known_part(self) -> Optional[tuple[float, FieldR]]:
@@ -343,3 +312,36 @@ class SCF(Pulay[FieldH]):
 
     def metric(self, v: FieldH) -> FieldH:
         return v.convolve(self.K_metric)
+
+
+class SolveNumberConstraint(torch.autograd.Function):
+    """..."""
+
+    @staticmethod
+    def forward(ctx, eig: torch.Tensor, T: float, fsum0: float) -> torch.Tensor:  # type: ignore
+        def n_electron_error(mu: float) -> float:
+            f = torch.special.expit((mu - eig) / T)
+            return f.sum().item() - fsum0
+
+        def expand_range(sign: int) -> float:
+            mu_limit = eig.mean().item()
+            dmu = sign * T
+            while sign * n_electron_error(mu_limit) <= 0.0:
+                mu_limit += dmu
+                dmu *= 2.0
+            return mu_limit
+
+        mu_min = expand_range(-1)
+        mu_max = expand_range(+1)
+        mu = brentq(n_electron_error, mu_min, mu_max)
+        ctx.eig = eig
+        ctx.T = T
+        ctx.mu = mu
+        return torch.tensor(mu, device=rc.device)
+
+    @staticmethod
+    def backward(ctx, grad_mu: torch.Tensor) -> tuple[torch.Tensor, None, None]:  # type: ignore
+        f = torch.special.expit((ctx.mu - ctx.eig) / ctx.T)
+        f_prime = f * (f - 1.0) / ctx.T
+        mu_prime = f_prime / f_prime.sum()
+        return grad_mu * mu_prime, None, None
