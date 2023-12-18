@@ -51,13 +51,14 @@ class DFT:
         exchange_functional: Union[str, Functional],
         n_bulk: float,
         T: float,
+        a: float = 1.0,
     ) -> None:
         comm = grid1d.grid.comm
         assert (comm is None) or (comm.size == 1)  # No MPI support here for simplicity
         self.grid1d = grid1d
         self.n_bulk = n_bulk
-        self.bulk_exchange = BulkExchange()
-        self.soft_coulomb = SoftCoulomb()
+        self.bulk_exchange = BulkExchange(a)
+        self.soft_coulomb = SoftCoulomb(a)
         self.n_electrons = n_bulk * grid1d.L
         self.T = T
         self.n = FieldR(grid1d.grid, data=torch.ones_like(grid1d.z) * n_bulk)
@@ -101,16 +102,23 @@ class DFT:
 
         # Initialize truncated kernel for exact exchange:
         Nz_sup = Nz * Nk
-        z_sup = grid1d.dz * torch.cat(
+        scale = np.ceil(3 * grid1d.dz / a)
+        dz_fine = grid1d.dz / scale
+        Nz_sup_fine = Nz_sup * scale
+        z_sup_fine = dz_fine * torch.cat(
             (
-                torch.arange(Nz_sup // 2, device=rc.device),
-                torch.arange(Nz_sup // 2 - Nz_sup, 0, device=rc.device),
+                torch.arange(Nz_sup_fine // 2, device=rc.device),
+                torch.arange(Nz_sup_fine // 2 - Nz_sup_fine, 0, device=rc.device),
             )
         )
-        Ksup = self.soft_coulomb(z_sup)
-        Ksup_tilde = torch.fft.fft(Ksup).real * grid1d.dz
+        Ksup_fine = self.soft_coulomb(z_sup_fine)
+        Ksup_fine_tilde = torch.fft.fft(Ksup_fine).real * dz_fine
+        Ksup_tilde = torch.cat(
+            (Ksup_fine_tilde[: Nz_sup // 2], Ksup_fine_tilde[-Nz_sup // 2 :])
+        )
         # --- split supercell kernel by integer q offsets
-        self.Kx_tilde = {0: Ksup_tilde[::Nk]}
+        self.Kx_tilde = torch.zeros((2 * Nk - 1, Nz))
+        self.Kx_tilde[0] = Ksup_tilde[::Nk]
         for iq in range(1, Nk):
             Kx_cur = Ksup_tilde[iq::Nk]
             self.Kx_tilde[iq] = Kx_cur
@@ -208,12 +216,12 @@ class DFT:
         IC = self.to_real_space(C)
         Exx = torch.zeros(tuple(), device=rc.device)
         for k1, IC1, f1 in zip(chain(k, -k), chain(IC, IC.conj()), chain(f, f)):
-            for k2, IC2, f2 in zip(k, IC, f):
-                iq = round((k2 - k1).item() / dk)
-                K = self.Kx_tilde[iq]
-                n12 = torch.einsum("ax, bx -> abx", IC1.conj(), IC2)
-                n12tilde = torch.fft.fft(n12, norm="forward")
-                Exx += torch.einsum("abG, G, a, b ->", abs_squared(n12tilde), K, f1, f2)
+            # for k2, IC2, f2 in zip(k, IC, f):
+            iq = torch.round((k - k1.item()) / dk).to(int)
+            K = self.Kx_tilde[iq]
+            n12 = torch.einsum("ax, kbx -> kabx", IC1.conj(), IC)
+            n12tilde = torch.fft.fft(n12, norm="forward")
+            Exx += torch.einsum("kabG, kG, a, kb ->", abs_squared(n12tilde), K, f1, f)
         wk_unreduced = dk  # without spin and symmetry weights
         return (-0.5 * wk_unreduced * self.wk / self.grid1d.L) * Exx
 

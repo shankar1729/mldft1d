@@ -129,7 +129,7 @@ def run(
         plt.legend(
             [
                 Line2D([0], [0], color=styles[0][0], linestyle=styles[0][1]),
-                Line2D([0], [0], color=styles[1][0], linestyle=styles[0][1]),
+                Line2D([0], [0], color=styles[1][0], linestyle=styles[1][1]),
             ],
             names,
         )
