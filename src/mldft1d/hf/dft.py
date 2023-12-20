@@ -52,6 +52,7 @@ class DFT:
         n_bulk: float,
         T: float,
         a: float = 1.0,
+        periodic: bool = True,
     ) -> None:
         comm = grid1d.grid.comm
         assert (comm is None) or (comm.size == 1)  # No MPI support here for simplicity
@@ -61,6 +62,7 @@ class DFT:
         self.soft_coulomb = SoftCoulomb(a)
         self.n_electrons = n_bulk * grid1d.L
         self.T = T
+        self.periodic = periodic
         self.n = FieldR(grid1d.grid, data=torch.ones_like(grid1d.z) * n_bulk)
         self.V = self.n.zeros_like()
         self.energy = Energy()
@@ -103,33 +105,41 @@ class DFT:
             * ((self.k[:, None] + self.iG[None, :]) * (2 * np.pi / grid1d.L)).square()
         )
 
+        def initialize_kernel(Nz_sup):
+            scale = np.ceil(3 * grid1d.dz / a)
+            dz_fine = grid1d.dz / scale
+            Nz_sup_fine = Nz_sup * scale
+            z_sup_fine = dz_fine * torch.cat(
+                (
+                    torch.arange(Nz_sup_fine // 2, device=rc.device),
+                    torch.arange(Nz_sup_fine // 2 - Nz_sup_fine, 0, device=rc.device),
+                )
+            )
+            Ksup_fine = self.soft_coulomb(z_sup_fine)
+            Ksup_fine_tilde = torch.fft.fft(Ksup_fine).real * dz_fine
+            Ksup_tilde = torch.cat(
+                (Ksup_fine_tilde[: Nz_sup // 2], Ksup_fine_tilde[-Nz_sup // 2 :])
+            )
+            return Ksup_tilde
+
         # Initialize coulomb kernel for Hartree term:
         self.coulomb_tilde = self.soft_coulomb.tilde(grid1d.Gmag.flatten())
         self.coulomb_tilde[0] = 0.0
 
         # Initialize truncated kernel for exact exchange:
-        Nz_sup = Nz * Nk
-        scale = np.ceil(3 * grid1d.dz / a)
-        dz_fine = grid1d.dz / scale
-        Nz_sup_fine = Nz_sup * scale
-        z_sup_fine = dz_fine * torch.cat(
-            (
-                torch.arange(Nz_sup_fine // 2, device=rc.device),
-                torch.arange(Nz_sup_fine // 2 - Nz_sup_fine, 0, device=rc.device),
-            )
-        )
-        Ksup_fine = self.soft_coulomb(z_sup_fine)
-        Ksup_fine_tilde = torch.fft.fft(Ksup_fine).real * dz_fine
-        Ksup_tilde = torch.cat(
-            (Ksup_fine_tilde[: Nz_sup // 2], Ksup_fine_tilde[-Nz_sup // 2 :])
-        )
+        Kx_sup_tilde = initialize_kernel(Nz * Nk)
         # --- split supercell kernel by integer q offsets
         self.Kx_tilde = torch.zeros((2 * Nk - 1, Nz))
-        self.Kx_tilde[0] = Ksup_tilde[::Nk]
+        self.Kx_tilde[0] = Kx_sup_tilde[::Nk]
         for iq in range(1, Nk):
-            Kx_cur = Ksup_tilde[iq::Nk]
+            Kx_cur = Kx_sup_tilde[iq::Nk]
             self.Kx_tilde[iq] = Kx_cur
             self.Kx_tilde[iq - Nk] = torch.roll(Kx_cur, 1)
+
+        if not periodic:
+            # Initialize truncated kernel for Hartree:
+            KH_tilde = initialize_kernel(Nz)
+            self.coulomb_tilde = KH_tilde[: len(self.coulomb_tilde)]
 
     def to_real_space(self, C: torch.Tensor) -> torch.Tensor:
         Nk, Nbands, NG = C.shape

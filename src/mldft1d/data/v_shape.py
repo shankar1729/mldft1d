@@ -46,9 +46,16 @@ def _get_random(grid1d: Grid1D, *, sigma: float, seed: int) -> torch.Tensor:
     return Gnoise
 
 
+def _get_coulomb1d(grid1d: Grid1D, *, a: float = 1.0) -> torch.Tensor:
+    Ktilde = 2.0 * torch.special.modified_bessel_k0(torch.abs(grid1d.Gmag * a))
+    Ktilde[grid1d.iGz == 0] = 0.0
+    return Ktilde.to(torch.complex128)
+
+
 _get_map: Dict[str, Any] = {
     "gauss": _get_gauss,
     "cosine": _get_cosine,
     "rectangular": _get_rectangular,
     "random": _get_random,
+    "coulomb1d": _get_coulomb1d,
 }
