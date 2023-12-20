@@ -1,13 +1,11 @@
-L: 10.0
+L: 2.0
 dz: 0.1
 T: 0.01
-n_bulk: 0.2
-periodic: False
+n_bulk: 1.0
 
 Vshape:
   shape: coulomb1d
   a: 1.0
-  periodic: False
 
 lbda: -2.0
 a: 1.0

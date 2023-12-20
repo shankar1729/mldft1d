@@ -119,11 +119,13 @@ def run(
         for (dft_name, dft), style in zip(dfts.items(), styles):
             names.append(dft_name)
             if isinstance(dft, hf.DFT):
-                eig = np.array(dft.eig.detach())
-                k = np.array(dft.k)
+                k = dft.k.numpy() if dft.periodic else np.array([0.0, 1.0])
+                eig = dft.eig.detach().numpy()
+                if not dft.periodic:
+                    eig = np.repeat(eig, 2, axis=0)
                 mu = dft.mu
                 n_plot = np.max(np.where(eig < mu), axis=1)[1] + 4
-                plt.plot(k[:, ...], eig[:, 0:n_plot] - mu, style, label=dft_name)
+                plt.plot(k[:, ...], eig[:, :n_plot] - mu, style, label=dft_name)
         plt.xlabel("$k$")
         plt.ylabel(r"$\epsilon_{nk}-\mu$")
         plt.legend(
@@ -136,7 +138,6 @@ def run(
         plt.axhline(0, color="k", linestyle="--")
         plt.show()
         plt.savefig(f"{run_name}-eigs.pdf", bbox_inches="tight")
-        # plt.close('all')
 
 
 def main() -> None:

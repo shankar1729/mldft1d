@@ -29,6 +29,7 @@ class DFT:
     soft_coulomb: SoftCoulomb  #: 1D Soft-Coulomb interaction kernel
     mu: float  #: Bulk chemical potential (fixed when n_electrons is zero)
     T: float  #: Fermi smearing width
+    periodic: bool  #: Whether the system is periodic (crystal) or isolated (molecule)
     n: FieldR  #: Equilibrium density
     V: FieldR  #: External potential
     scf: SCF  #: Self-consistent field algorithm (for LDA/ML cases only)
@@ -89,11 +90,18 @@ class DFT:
         log.info(f"a: {a}")
 
         # Setup k-points:
-        Nk = 2 * int(np.ceil(2 * np.pi / (self.grid1d.L * self.T)))  # assuming vF ~ 1
-        dk = 1.0 / Nk
-        self.k = torch.arange(0.5 * dk, 0.5, dk, device=rc.device)  # Monkhorst-Pack
-        self.wk = 4 * dk  # weight of each k-point (2 for symm, 2 for spin)
-        log.info(f"Reduced {Nk} k-points to {Nk // 2} using inversion symmetry")
+        if self.periodic:
+            Nk = 2 * int(np.ceil(2 * np.pi / (self.grid1d.L * self.T)))  # for vF ~ 1
+            dk = 1.0 / Nk
+            self.k = torch.arange(0.5 * dk, 0.5, dk, device=rc.device)  # off-Gamma
+            self.wk = 4 * dk  # weight of each k-point (2 for symm, 2 for spin)
+            log.info(f"Reduced {Nk} k-points to {Nk // 2} using inversion symmetry")
+        else:
+            Nk = 1
+            dk = 1.0
+            self.k = torch.zeros(1, device=rc.device)  # Gamma-only
+            self.wk = 2 * dk  # weight of each k-point (2 for spin)
+            log.info("Gamma-only: no reducable k-points")
 
         # Setup basis and kinetic energy operator:
         iG_full = grid1d.grid.get_mesh("G")[..., 2].flatten()
@@ -211,10 +219,14 @@ class DFT:
 
     def compute_exx(self, C: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
         k = self.k
-        dk = (k[1] - k[0]).item()
+        dk = (k[1] - k[0]).item() if self.periodic else 1.0
         IC = self.to_real_space(C)
         Exx = torch.zeros(tuple(), device=rc.device)
-        for k1, IC1, f1 in zip(chain(k, -k), chain(IC, IC.conj()), chain(f, f)):
+        for k1, IC1, f1 in (
+            zip(chain(k, -k), chain(IC, IC.conj()), chain(f, f))
+            if self.periodic
+            else zip(k, IC, f)
+        ):
             # for k2, IC2, f2 in zip(k, IC, f):
             iq = torch.round((k - k1.item()) / dk).to(int)
             K = self.Kx_tilde[iq]
