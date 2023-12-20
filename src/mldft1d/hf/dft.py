@@ -105,29 +105,16 @@ class DFT:
             * ((self.k[:, None] + self.iG[None, :]) * (2 * np.pi / grid1d.L)).square()
         )
 
-        def initialize_kernel(Nz_sup):
-            scale = np.ceil(3 * grid1d.dz / a)
-            dz_fine = grid1d.dz / scale
-            Nz_sup_fine = Nz_sup * scale
-            z_sup_fine = dz_fine * torch.cat(
-                (
-                    torch.arange(Nz_sup_fine // 2, device=rc.device),
-                    torch.arange(Nz_sup_fine // 2 - Nz_sup_fine, 0, device=rc.device),
-                )
-            )
-            Ksup_fine = self.soft_coulomb(z_sup_fine)
-            Ksup_fine_tilde = torch.fft.fft(Ksup_fine).real * dz_fine
-            Ksup_tilde = torch.cat(
-                (Ksup_fine_tilde[: Nz_sup // 2], Ksup_fine_tilde[-Nz_sup // 2 :])
-            )
-            return Ksup_tilde
-
         # Initialize coulomb kernel for Hartree term:
-        self.coulomb_tilde = self.soft_coulomb.tilde(grid1d.Gmag.flatten())
-        self.coulomb_tilde[0] = 0.0
+        dz = self.grid1d.dz
+        self.coulomb_tilde = (
+            self.soft_coulomb.periodic_kernel(grid1d.Gmag.flatten())
+            if periodic
+            else self.soft_coulomb.truncated_kernel(Nz, dz, real=True)
+        )
 
         # Initialize truncated kernel for exact exchange:
-        Kx_sup_tilde = initialize_kernel(Nz * Nk)
+        Kx_sup_tilde = self.soft_coulomb.truncated_kernel(Nz * Nk, dz, real=False)
         # --- split supercell kernel by integer q offsets
         self.Kx_tilde = torch.zeros((2 * Nk - 1, Nz))
         self.Kx_tilde[0] = Kx_sup_tilde[::Nk]
@@ -135,11 +122,6 @@ class DFT:
             Kx_cur = Kx_sup_tilde[iq::Nk]
             self.Kx_tilde[iq] = Kx_cur
             self.Kx_tilde[iq - Nk] = torch.roll(Kx_cur, 1)
-
-        if not periodic:
-            # Initialize truncated kernel for Hartree:
-            KH_tilde = initialize_kernel(Nz)
-            self.coulomb_tilde = KH_tilde[: len(self.coulomb_tilde)]
 
     def to_real_space(self, C: torch.Tensor) -> torch.Tensor:
         Nk, Nbands, NG = C.shape

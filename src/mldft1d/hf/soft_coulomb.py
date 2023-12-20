@@ -1,5 +1,9 @@
 from dataclasses import dataclass
+
 import torch
+import numpy as np
+
+from qimpy import rc
 
 
 @dataclass
@@ -15,6 +19,33 @@ class SoftCoulomb:
     def tilde(self, G: torch.Tensor) -> torch.Tensor:
         """Evaluate in reciprocal space."""
         return 2.0 * torch.special.modified_bessel_k0(torch.abs(G * self.a))
+
+    def periodic_kernel(self, G: torch.Tensor) -> torch.Tensor:
+        """Same as tilde, but with G=0 component projected out."""
+        result = self.tilde(G)
+        result[G == 0.0] = 0.0
+        return result
+
+    def truncated_kernel(self, Nz: int, dz: float, real: bool) -> torch.Tensor:
+        # Evaluate on a fine enough real-space grid
+        scale = np.ceil(3 * dz / self.a)
+        dz_fine = dz / scale
+        Nz_fine = Nz * scale
+        z_fine = dz_fine * torch.cat(
+            (
+                torch.arange(Nz_fine // 2, device=rc.device),
+                torch.arange(Nz_fine // 2 - Nz_fine, 0, device=rc.device),
+            )
+        )
+        K_fine = self(z_fine)
+        # Fourier transform and down-sample to orginal
+        K_fine_tilde = torch.fft.fft(K_fine).real * dz_fine
+        Nz_half = Nz // 2
+        K_tilde_pos = K_fine_tilde[: (Nz_half + 1)]
+        if real:
+            return K_tilde_pos
+        else:
+            return torch.cat((K_tilde_pos, K_fine_tilde[(Nz_half + 1 - Nz) :]))
 
 
 if __name__ == "__main__":

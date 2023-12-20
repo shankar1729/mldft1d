@@ -2,15 +2,15 @@ L: 10.0
 dz: 0.1
 T: 0.01
 n_bulk: 0.2
+periodic: False
 
 Vshape:
-  shape: gauss
-  sigma: 0.25
-  #seed: 1
-  #duty: 0.1
+  shape: coulomb1d
+  a: 1.0
+  periodic: False
 
-lbda: -8.0
-a: 1.0 #0.0001
+lbda: -2.0
+a: 1.0
 
 functionals:
   LDA:

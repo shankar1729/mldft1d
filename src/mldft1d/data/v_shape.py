@@ -1,12 +1,16 @@
-import torch
-import numpy as np
-import qimpy as qp
-from .. import Grid1D
 from typing import Dict, Any
 
+import torch
+import numpy as np
 
-def get(grid1d: Grid1D, *, shape: str, **kwargs) -> qp.grid.FieldR:
-    return ~qp.grid.FieldH(grid1d.grid, data=_get_map[shape](grid1d, **kwargs))  # type: ignore
+from qimpy.grid import FieldH, FieldR
+from qimpy.math import abs_squared
+import mldft1d
+from .. import Grid1D
+
+
+def get(grid1d: Grid1D, *, shape: str, **kwargs) -> FieldR:
+    return ~FieldH(grid1d.grid, data=_get_map[shape](grid1d, **kwargs))  # type: ignore
 
 
 def _get_gauss(grid1d: Grid1D, *, sigma: float) -> torch.Tensor:
@@ -42,14 +46,21 @@ def _get_random(grid1d: Grid1D, *, sigma: float, seed: int) -> torch.Tensor:
     Gnoise[iGz == 0] = 0.0  # set average to zero
     # Filter and normalize:
     Gnoise *= (-0.5 * (Gmag * sigma).square()).exp()
-    Gnoise *= (1.0 / (qp.math.abs_squared(Gnoise) * Gweight).sum()).sqrt()
+    Gnoise *= (1.0 / (abs_squared(Gnoise) * Gweight).sum()).sqrt()
     return Gnoise
 
 
-def _get_coulomb1d(grid1d: Grid1D, *, a: float = 1.0) -> torch.Tensor:
-    Ktilde = 2.0 * torch.special.modified_bessel_k0(torch.abs(grid1d.Gmag * a))
-    Ktilde[grid1d.iGz == 0] = 0.0
-    return Ktilde.to(torch.complex128)
+def _get_coulomb1d(
+    grid1d: Grid1D, *, a: float = 1.0, periodic: bool = True
+) -> torch.Tensor:
+    soft_coulomb = mldft1d.hf.SoftCoulomb(a)
+    return (
+        soft_coulomb.periodic_kernel(grid1d.Gmag)
+        if periodic
+        else soft_coulomb.truncated_kernel(grid1d.grid.shape[2], grid1d.dz, real=True)[
+            None, None, :
+        ]
+    ).to(torch.complex128)
 
 
 _get_map: Dict[str, Any] = {
