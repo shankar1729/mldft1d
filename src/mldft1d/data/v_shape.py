@@ -54,13 +54,14 @@ def _get_coulomb1d(
     grid1d: Grid1D, *, a: float = 1.0, periodic: bool = True
 ) -> torch.Tensor:
     soft_coulomb = mldft1d.hf.SoftCoulomb(a)
-    return (
+    translation_phase = ((2j * np.pi) * grid1d.iGz * 0.5).exp()  # center on unit cell
+    return translation_phase * (
         soft_coulomb.periodic_kernel(grid1d.Gmag)
         if periodic
         else soft_coulomb.truncated_kernel(grid1d.grid.shape[2], grid1d.dz, real=True)[
             None, None, :
         ]
-    ).to(torch.complex128)
+    )
 
 
 _get_map: Dict[str, Any] = {
