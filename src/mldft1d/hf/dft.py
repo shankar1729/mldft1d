@@ -79,6 +79,13 @@ class DFT:
         else:
             self.scf = SCF(self)
 
+        # Print params to output
+        log.info(f"L: {self.grid1d.L}")
+        log.info(f"dz: {self.grid1d.dz}")
+        log.info(f"T: {self.T}")
+        log.info(f"n_bulk: {self.n_bulk}")
+        log.info(f"a: {a}")
+
         # Setup k-points:
         Nk = 2 * int(np.ceil(2 * np.pi / (self.grid1d.L * self.T)))  # assuming vF ~ 1
         dk = 1.0 / Nk
@@ -123,6 +130,24 @@ class DFT:
             Kx_cur = Ksup_tilde[iq::Nk]
             self.Kx_tilde[iq] = Kx_cur
             self.Kx_tilde[iq - Nk] = torch.roll(Kx_cur, 1)
+        # HACK
+        # Initialize truncated kernel for Hartree:
+        Nz_sup = Nz * 1  # Nk = 1
+        scale = np.ceil(3 * grid1d.dz / a)
+        dz_fine = grid1d.dz / scale
+        Nz_sup_fine = Nz_sup * scale
+        z_sup_fine = dz_fine * torch.cat(
+            (
+                torch.arange(Nz_sup_fine // 2, device=rc.device),
+                torch.arange(Nz_sup_fine // 2 - Nz_sup_fine, 0, device=rc.device),
+            )
+        )
+        Ksup_fine = self.soft_coulomb(z_sup_fine)
+        Ksup_fine_tilde = torch.fft.fft(Ksup_fine).real * dz_fine
+        Ksup_tilde = torch.cat(
+            (Ksup_fine_tilde[: Nz_sup // 2], Ksup_fine_tilde[-Nz_sup // 2 :])
+        )
+        self.coulomb_tilde = Ksup_tilde[: len(self.coulomb_tilde)]
 
     def to_real_space(self, C: torch.Tensor) -> torch.Tensor:
         Nk, Nbands, NG = C.shape
@@ -252,7 +277,7 @@ class SCF(Pulay[FieldH]):
         self,
         dft: DFT,
         *,
-        n_iterations: int = 50,
+        n_iterations: int = 500,
         energy_threshold: float = 1e-8,
         residual_threshold: float = 1e-7,
         n_consecutive: int = 2,

@@ -24,7 +24,7 @@ class OEP(Minimize[torch.Tensor]):
         dft: hf.DFT,
         *,
         # comm: MPI.Comm,
-        n_iterations: int = 80,
+        n_iterations: int = 800,
         energy_threshold: float = 1e-7,
         n_consecutive: int = 1,
         method: str = "l-bfgs",
