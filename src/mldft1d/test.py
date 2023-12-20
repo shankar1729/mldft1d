@@ -38,6 +38,9 @@ def run(
 ):
     # Create grid and external potential:
     grid1d = Grid1D(L=L, dz=dz)
+    if Vshape["shape"] == "coulomb1d":
+        Vshape["a"] = dft_common_args["a"]
+        Vshape["periodic"] = dft_common_args["periodic"]
     V = lbda * v_shape.get(grid1d, **qp.io.dict.key_cleanup(Vshape))
 
     # Create DFTs:
