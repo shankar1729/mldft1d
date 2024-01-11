@@ -141,6 +141,7 @@ def run(
         plt.axhline(0, color="k", linestyle="--")
         plt.show()
         plt.savefig(f"{run_name}-eigs.pdf", bbox_inches="tight")
+        # plt.close('all')
 
 
 def main() -> None:

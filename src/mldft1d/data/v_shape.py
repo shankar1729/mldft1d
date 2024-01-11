@@ -51,17 +51,31 @@ def _get_random(grid1d: Grid1D, *, sigma: float, seed: int) -> torch.Tensor:
 
 
 def _get_coulomb1d(
-    grid1d: Grid1D, *, a: float = 1.0, periodic: bool = True
+    grid1d: Grid1D,
+    *,
+    a: float = 1.0,
+    periodic: bool = True,
+    ionpos: list = None,
+    fractional: bool = True
 ) -> torch.Tensor:
+    L = grid1d.L
+    if len(ionpos) == 0:
+        ionpos = [0.5] if fractional else [0.5 * L]  # default one atom centered
     soft_coulomb = mldft1d.hf.SoftCoulomb(a)
-    translation_phase = ((2j * np.pi) * grid1d.iGz * 0.5).exp()  # center on unit cell
-    return translation_phase * (
+    V1 = (
         soft_coulomb.periodic_kernel(grid1d.Gmag)
         if periodic
         else soft_coulomb.truncated_kernel(grid1d.grid.shape[2], grid1d.dz, real=True)[
             None, None, :
         ]
     )
+    V = torch.zeros(V1.shape, dtype=torch.complex128)
+    print("IONPOS: ", ionpos, L)
+    for _ionx in ionpos:
+        trans = _ionx if fractional else _ionx / L
+        translation_phase = ((2j * np.pi) * grid1d.iGz * -trans).exp()
+        V += V1 * translation_phase / L
+    return V
 
 
 _get_map: Dict[str, Any] = {
