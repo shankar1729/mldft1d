@@ -1,4 +1,4 @@
-L: 50.0
+L: 80.0
 dz: 0.1
 T: 0.01
 n_bulk: 0.5
@@ -6,10 +6,11 @@ periodic: False
 
 Vshape:
   shape: coulomb1d
-  ionpos: [15, 35]
+  ionpos: [30, 50]
+  Zs: [20,20]
   fractional: False
 
-lbda: -12.5
+lbda: -1.0
 a: 1.0 #0.0001
 
 functionals:

@@ -55,12 +55,18 @@ def _get_coulomb1d(
     *,
     a: float = 1.0,
     periodic: bool = True,
+    fractional: bool = True,
     ionpos: list = None,
-    fractional: bool = True
+    Zs: list = None
 ) -> torch.Tensor:
     L = grid1d.L
-    if len(ionpos) == 0:
+    if ionpos is None or len(ionpos) == 0:
         ionpos = [0.5] if fractional else [0.5 * L]  # default one atom centered
+    if Zs is None or len(Zs) == 0:
+        Zs = [1.0]  # default atomic charge
+    assert len(Zs) == 1 or len(Zs) == len(ionpos)
+    if len(Zs) == 1:
+        Zs = [Zs[0] for _ion in ionpos]
     soft_coulomb = mldft1d.hf.SoftCoulomb(a)
     V1 = (
         soft_coulomb.periodic_kernel(grid1d.Gmag)
@@ -70,11 +76,10 @@ def _get_coulomb1d(
         ]
     )
     V = torch.zeros(V1.shape, dtype=torch.complex128)
-    print("IONPOS: ", ionpos, L)
-    for _ionx in ionpos:
+    for _ionx, _Z in zip(ionpos, Zs):
         trans = _ionx if fractional else _ionx / L
         translation_phase = ((2j * np.pi) * grid1d.iGz * -trans).exp()
-        V += V1 * translation_phase / L
+        V += V1 * _Z * translation_phase / L
     return V
 
 
