@@ -1,74 +1,58 @@
+import sys
+
 import h5py
-from mldft1d import trapz
-import matplotlib as mpl
+from matplotlib import colors, cm
 import matplotlib.pyplot as plt
 import numpy as np
-import sys
 
 
 def plot_data(data_file: str) -> None:
     with h5py.File(data_file, "r") as f:
         z = np.array(f["z"])
         V = np.array(f["V"])
-        lbda = np.array(f["lbda"])
         n = np.array(f["n"])
         E = np.array(f["E"])
-        n_bulk = f.attrs["n_bulk"]
-        mu = f.attrs["mu"]
-        V0 = np.array(f["V0"]) if ("V0" in f) else None
+        dE_dn = np.array(f["dE_dn"])
 
-    # Plot density profiles and potential:
-    plt.figure(1)
-    # --- initialize colormap to color by V0
-    normalize = mpl.colors.Normalize(vmin=lbda.min(), vmax=lbda.max())
-    cmap = mpl.cm.get_cmap("RdBu")
-    # --- plot densities
-    for lbda_cur, n_cur in zip(lbda, n):
-        plt.plot(z, n_cur, color=cmap(normalize(lbda_cur)), lw=1)
-    plt.axhline(n_bulk, color="k", ls="dotted", lw=1)
-    # --- plot potential for comparison
-    plt.plot(z, V, color="k", lw=1, ls="dashed")
-    plt.xlabel(r"$z$")
-    plt.ylabel(r"$n(z)$")
-    plt.xlim(z.min(), z.max())
-    # --- add colorbar
-    sm = mpl.cm.ScalarMappable(cmap=cmap, norm=normalize)
-    sm.set_array([])
-    plt.colorbar(sm, label=r"Perturbation strength, $\lambda$", ax=plt.gca())
+    # Plot site density profiles and potentials:
+    n_sites = n.shape[1]
+    n_perts = len(E)
+    for i_site in range(n_sites):
+        plt.figure()
+        # --- initialize colormap to color by V0
+        normalize = colors.Normalize(vmin=0, vmax=(n_perts - 1))
+        cmap = cm.get_cmap("RdBu")
+        # --- plot densities
+        for i_pert, n_cur in enumerate(n):
+            plt.plot(z, n_cur[i_site], color=cmap(normalize(i_pert)), lw=1)
+        # --- plot potential for comparison
+        plt.plot(z, V[i_site], color="k", lw=1, ls="dashed")
+        plt.xlabel(r"$z$")
+        plt.ylabel(r"$n(z)$")
+        plt.title(f"Site {i_site}")
+        plt.xlim(z.min(), z.max())
+        # --- add colorbar
+        sm = cm.ScalarMappable(cmap=cmap, norm=normalize)
+        sm.set_array([])
+        plt.colorbar(sm, label=r"Calculation index", ax=plt.gca())
 
-    if len(lbda) > 1:
-        # Compare exact and thermodynamically-integrated energies:
-        plt.figure(2)
+    if n_perts > 1:
+        # Check E and dE_dn consistency:
+        plt.figure()
         # --- exact energies
-        E -= np.interp(0.0, lbda, E)  # difference from bulk
-        plt.plot(lbda, E, label="CDFT")
-        # --- thermodynamic integration
+        i_perts = np.arange(n_perts)
+        plt.plot(i_perts, E - E[0], label="CDFT")
+        # --- integration of dE/dn
         dz = z[1] - z[0]
-        integrand = (n @ V) * dz
-        dlbda = lbda[1] - lbda[0]
-        E_TI = trapz(integrand, dlbda)
-        E_TI -= np.interp(0.0, lbda, E_TI)  # difference from bulk
-        plt.plot(lbda, E_TI, "r+", label="TI")
-        plt.axhline(0, color="k", lw=1, ls="dotted")
-        plt.axvline(0, color="k", lw=1, ls="dotted")
+        dn = np.diff(n, axis=0)
+        dE_dn_mid = 0.5 * (dE_dn[:-1] + dE_dn[1:])
+        integrand = dz * (dn * dE_dn_mid).sum(axis=(1, 2))
+        E_TI = np.concatenate(([0.0], np.cumsum(integrand)))
+        plt.plot(i_perts, E_TI, "r+", label="TI")
         plt.legend()
-        plt.xlim(lbda.min(), lbda.max())
-        plt.xlabel(r"Perturbation strength, $V_0$")
+        plt.xlim(0, n_perts - 1)
+        plt.xlabel(r"Calculation index")
         plt.ylabel(r"Free energy change, $\Delta\Phi$")
-
-        # Plot unknown part of potential separately, if applicable:
-        if V0 is not None:
-            plt.figure()
-            for lbda_cur, V0_cur in zip(lbda, V0):
-                V_unknown = mu - lbda_cur * V - V0_cur
-                plt.plot(z, V_unknown, color=cmap(normalize(lbda_cur)), lw=1)
-            plt.xlabel(r"$z$")
-            plt.ylabel(r"$V_{\mathrm{unknown}}(z)$")
-            plt.xlim(z.min(), z.max())
-            # --- add colorbar
-            sm = mpl.cm.ScalarMappable(cmap=cmap, norm=normalize)
-            sm.set_array([])
-            plt.colorbar(sm, label=r"Perturbation strength, $\lambda$", ax=plt.gca())
 
     plt.show()
 

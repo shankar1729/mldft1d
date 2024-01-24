@@ -19,7 +19,7 @@ for i_repeat in range(1000):
     n_bulk_choices.append((n_bulk_0, n_bulk_1))
 
 batch(
-    n_batch=1,
+    n_batch=1000,
     prefix="random_data/random",
     functional="hardrods",
     L=Choice(np.arange(4.0, 20.0, 0.2)),
@@ -32,6 +32,7 @@ batch(
             shape="random",
             sigma=uniform(loc=0.2, scale=2.0),
             seed=randint(1, np.iinfo(np.int32).max),
+            scale=uniform(),
         )
     ]
     * 2,
