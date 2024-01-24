@@ -1,12 +1,19 @@
-import qimpy as qp
+from __future__ import annotations
+from typing import Callable, Protocol, Optional, Any, Union, Sequence
+from dataclasses import dataclass
+import sys
+
 import numpy as np
+import torch
+import h5py
+
+import qimpy
+from qimpy import log, rc, io
+from qimpy.mpi import TaskDivision
+from qimpy.grid import FieldR
 from .. import Grid1D, get1D
 from . import v_shape
 from .. import hardrods, kohnsham, ising, protocols
-from typing import Callable, Protocol, Optional, Any
-from dataclasses import dataclass
-import h5py
-import sys
 
 
 make_exact_dft_map: dict[str, Callable[..., protocols.DFT]] = {
@@ -20,27 +27,41 @@ def run(
     *,
     L: float,
     dz: float,
-    n_bulk: float,  #: Bulk number density of the fluid
-    Vshape: dict,  #: Potential shape and parameters
+    n_bulk: Union[float, Sequence[float]],  #: Bulk number density of the fluid
+    Vshape: Union[dict, Sequence[dict]],  #: Potential shape and parameters
     lbda: dict,  #: min: float, max: float, step: float,
     filename: str,  #: hdf5 filename, must end with .hdf5
     functional: str,  #: name of exact functional to use (hardrods | kohnsham)
     **dft_kwargs,  #: extra keyword arguments forwarded to the exact dft
 ) -> None:
 
+    # Check site density / potential counts:
+    Vshape = [Vshape] if isinstance(Vshape, dict) else Vshape
+    n_bulk = torch.tensor(
+        [n_bulk] if isinstance(n_bulk, float) else n_bulk, device=rc.device
+    )
+    n_sites = len(n_bulk)
+    assert len(Vshape) == n_sites
+
     grid1d = Grid1D(L=L, dz=dz, parallel=False)
     dft = make_exact_dft_map[functional](grid1d=grid1d, n_bulk=n_bulk, **dft_kwargs)
     n0 = dft.n
 
-    qp.log.info(f"mu = {dft.mu}")
-    V = v_shape.get(grid1d, **qp.io.dict.key_cleanup(Vshape))
+    log.info(f"mu = {dft.mu}")
 
-    lbda_arr = get_lbda_arr(**qp.io.dict.key_cleanup(lbda))
-    E = np.zeros_like(lbda_arr)
-    n = np.zeros((len(E), len(get1D(grid1d.z))))
-    E0 = np.zeros_like(E)
-    V0 = np.zeros_like(n)
-    has_known_part = False
+    # Initialize potential shape:
+    Vdata = torch.stack(
+        [
+            v_shape.get(grid1d, **io.dict.key_cleanup(Vshape_i)).data
+            for Vshape_i in Vshape
+        ]
+    )
+    V = FieldR(grid1d.grid, data=Vdata)
+
+    lbda_arr = get_lbda_arr(**io.dict.key_cleanup(lbda))
+    E = np.zeros_like(lbda_arr)  # part to be trained
+    n = np.zeros((len(E), n_sites, len(get1D(grid1d.z))))
+    dE_dn = np.zeros_like(n)  # functional derivative
 
     # Split runs by sign and in increasing order of perturbation strength:
     abs_index = abs(lbda_arr).argsort()
@@ -50,25 +71,17 @@ def run(
         dft.n = n0
         for index in cur_index:
             dft.V = lbda_arr[index] * V
-            E[index] = float(dft.minimize())
+            dft.minimize()
             n[index] = get1D(dft.n.data)
-            if (EV0_i := dft.known_part()) is not None:
-                E0_i, V0_i = EV0_i
-                E0[index] = E0_i
-                V0[index] = get1D(V0_i.data)
-                has_known_part = True
+            E[index], dE_dn_cur = dft.training_targets()
+            dE_dn[index] = get1D(dE_dn_cur.data)
 
     f = h5py.File(filename, "w")
     f["z"] = get1D(grid1d.z)
-    f["V"] = get1D(V.data)
-    f["lbda"] = lbda_arr
+    f["V"] = get1D(Vdata)
     f["n"] = n
     f["E"] = E
-    if has_known_part:
-        f["E0"] = E0
-        f["V0"] = V0
-    f.attrs["mu"] = dft.mu
-    f.attrs["n_bulk"] = n_bulk
+    f["dE_dn"] = dE_dn
     for dft_arg_name, dft_arg_value in dft_kwargs.items():
         f.attrs[dft_arg_name] = dft_arg_value
     f.close()
@@ -81,7 +94,7 @@ def get_lbda_arr(*, min: float, max: float, step: float) -> np.ndarray:
 
 class Sampler(Protocol):
     """Random sampler for batched-data generation.
-    Compatibly with scipy.stats distributions."""
+    Compatible with scipy.stats distributions."""
 
     def rvs(self) -> float:
         ...
@@ -91,11 +104,12 @@ class Sampler(Protocol):
 class Choice:
     """Random choice from a sequence of variables."""
 
-    choices: np.ndarray
+    choices: Sequence
     probabilities: Optional[np.ndarray] = None
 
-    def rvs(self) -> float:
-        return np.random.choice(self.choices, p=self.probabilities, replace=True)
+    def rvs(self) -> Any:
+        index = np.random.choice(len(self.choices), p=self.probabilities, replace=True)
+        return self.choices[index]
 
 
 def batch(n_batch: int, prefix: str, **kwargs) -> None:
@@ -104,17 +118,17 @@ def batch(n_batch: int, prefix: str, **kwargs) -> None:
     Every argument with `kwargs` that is an object with an `rvs` method
     will be sampled, while everything else will be forwarded to `run`
     """
-    comm = qp.rc.comm
-    division = qp.mpi.TaskDivision(n_tot=n_batch, n_procs=comm.size, i_proc=comm.rank)
+    comm = rc.comm
+    division = TaskDivision(n_tot=n_batch, n_procs=comm.size, i_proc=comm.rank)
     for i_batch in range(1 + division.i_start, 1 + division.i_stop):
-        qp.log.warning(
+        log.warning(
             f"\n---- Generating {i_batch} of {n_batch} on process {comm.rank} ----\n"
         )
         sampled_args = sample_dict(kwargs)
         try:
             run(filename=f"{prefix}{i_batch}.h5", **sampled_args)
         except Exception as err:
-            qp.log.error(f"Failed with exception {err}")
+            log.error(f"Failed with exception {err}")
 
 
 def sample_dict(d: dict[str, Any]) -> dict[str, Any]:
@@ -123,10 +137,27 @@ def sample_dict(d: dict[str, Any]) -> dict[str, Any]:
     for key, value in d.items():
         if isinstance(value, dict):
             output[key] = sample_dict(value)
+        elif isinstance(value, list):
+            output[key] = sample_list(value)
         elif hasattr(value, "rvs"):
             output[key] = value.rvs()
         else:
             output[key] = value
+    return output
+
+
+def sample_list(d: list) -> list:
+    """Recursively sample Sampler objects within a list"""
+    output = []
+    for value in d:
+        if isinstance(value, dict):
+            output.append(sample_dict(value))
+        elif isinstance(value, list):
+            output.append(sample_list(value))
+        elif hasattr(value, "rvs"):
+            output.append(value.rvs())
+        else:
+            output.append(value)
     return output
 
 
@@ -136,11 +167,11 @@ def main() -> None:
         exit(1)
     in_file = sys.argv[1]
 
-    qp.io.log_config()  # default set up to log from MPI head alone
-    qp.log.info("Using QimPy " + qp.__version__)
-    qp.rc.init()
+    io.log_config()  # default set up to log from MPI head alone
+    log.info("Using QimPy " + qimpy.__version__)
+    rc.init()
 
-    input_dict = qp.io.dict.key_cleanup(qp.io.yaml.load(in_file))
+    input_dict = io.dict.key_cleanup(io.yaml.load(in_file))
     run(**input_dict)
 
 

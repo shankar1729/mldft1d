@@ -43,7 +43,7 @@ class Grid1D:
 
 
 def get1D(x: torch.Tensor) -> np.ndarray:
-    return x[0, 0].to(qp.rc.cpu).numpy()
+    return x[..., 0, 0, :].to(qp.rc.cpu).numpy()
 
 
 def trapz(f: np.ndarray, h: float) -> np.ndarray:

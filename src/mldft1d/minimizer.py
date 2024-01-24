@@ -106,6 +106,6 @@ class Minimizer(Minimize[FieldR]):
         n = self.n
         n.data.requires_grad = True
         n.data.grad = None
-        E = self.functionals[:-1].get_energy(n)
+        E = self.functionals[-1].get_energy(n)
         (E / n.grid.dV).backward()  # functional derivative -> n.data.grad
         return E.item(), FieldR(n.grid, data=n.data.grad)

@@ -41,14 +41,16 @@ def run(
     n_bulk_range: Sequence[tuple[float, float]] = ((0.0, 1.0),),
     **dft_common_args,
 ):
-    # Create grid and external potential:
-    grid1d = Grid1D(L=L, dz=dz)
+    # Check site density / potential counts:
     Vshape = [Vshape] if isinstance(Vshape, dict) else Vshape
     n_bulk = torch.tensor(
         [n_bulk] if isinstance(n_bulk, float) else n_bulk, device=rc.device
     )
     n_sites = len(n_bulk)
     assert len(Vshape) == n_sites
+
+    # Create grid and external potential:
+    grid1d = Grid1D(L=L, dz=dz)
     for Vshape_i in Vshape:
         if Vshape_i["shape"] == "coulomb1d":
             Vshape_i["a"] = dft_common_args["a"]
