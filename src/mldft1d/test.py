@@ -1,14 +1,18 @@
-import os
+from __future__ import annotations
+from typing import Callable, Sequence, Union
 import sys
-import qimpy as qp
-import torch
-from . import Grid1D, get1D, Minimizer, protocols, hardrods, kohnsham, hf, ising, nn
-from .data import v_shape
-from .kohnsham import Schrodinger, ThomasFermi
-from typing import Callable
+import os
+
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
+import torch
+
+import qimpy
+from qimpy import rc, log, io
+from . import Grid1D, get1D, Minimizer, protocols, hardrods, kohnsham, hf, ising, nn
+from .data import v_shape
+from .kohnsham import Schrodinger, ThomasFermi
 
 
 make_dft_map: dict[str, Callable[..., protocols.DFT]] = {
@@ -28,12 +32,12 @@ def run(
     *,
     L: float,
     dz: float,
-    n_bulk: float,
+    n_bulk: Union[float, Sequence[float]],
     Vshape: dict,
     lbda: float,
     functionals: dict,
     run_name: str,
-    n_bulk_range: tuple[float, float] = (0.0, 1.0),
+    n_bulk_range: Sequence[tuple[float, float]] = ((0.0, 1.0),),
     **dft_common_args,
 ):
     # Create grid and external potential:
@@ -41,12 +45,15 @@ def run(
     if Vshape["shape"] == "coulomb1d":
         Vshape["a"] = dft_common_args["a"]
         Vshape["periodic"] = dft_common_args["periodic"]
-    V = lbda * v_shape.get(grid1d, **qp.io.dict.key_cleanup(Vshape))
+    V = lbda * v_shape.get(grid1d, **io.dict.key_cleanup(Vshape))
 
     # Create DFTs:
     dfts = dict[str, protocols.DFT]()
+    n_bulk = torch.tensor(
+        [n_bulk] if isinstance(n_bulk, float) else n_bulk, device=rc.device
+    )
     for label, dft_dict in functionals.items():
-        for dft_name, dft_args in qp.io.dict.key_cleanup(dft_dict).items():
+        for dft_name, dft_args in io.dict.key_cleanup(dft_dict).items():
             dfts[label] = make_dft_map[dft_name](
                 grid1d=grid1d, n_bulk=n_bulk, **dft_args, **dft_common_args
             )
@@ -57,29 +64,38 @@ def run(
             dft.finite_difference_test(dft.random_direction())
         dft.minimize()  # equilibrium results in dft.energy and dft.n
 
-    if qp.rc.is_head:
+    if rc.is_head:
         # Plot density and potential:
-        plt.figure(1, figsize=(10, 6))
+        plt.figure(figsize=(10, 6))
         z1d = get1D(grid1d.z)
         plt.plot(z1d, get1D(V.data), label="$V$")
         for dft_name, dft in dfts.items():
             E = float(dft.energy)
             mu = dft.mu
-            eig = dft.eig.detach().numpy()
-            homo = np.max(np.where(eig < mu), axis=1)
-            lumo = np.min(np.where(eig > mu), axis=1)
-            gap = eig[lumo[0], lumo[1]] - eig[homo[0], homo[1]]
-            qp.log.info(f"{dft_name:>14s}:  mu: {mu:>7f}  E: {E:>9f}  gap: {gap:>9f}")
-            plt.plot(z1d, get1D(dft.n.data), label=f"$n$ ({dft_name})")
-        plt.axhline(n_bulk, color="k", ls="dotted")
+            if isinstance(dft, hf.DFT):
+                eig = dft.eig.detach().numpy()
+                homo = np.max(np.where(eig < mu), axis=1)
+                lumo = np.min(np.where(eig > mu), axis=1)
+                gap = eig[lumo[0], lumo[1]] - eig[homo[0], homo[1]]
+            else:
+                gap = np.nan
+            log.info(f"{dft_name:>14s}:  mu: {io.fmt(mu)}  E: {E:>9f}  gap: {gap:>9f}")
+            plt.plot(z1d, get1D(dft.n[0].data), label=f"$n$ ({dft_name})")
+        plt.axhline(n_bulk[0], color="k", ls="dotted")
         plt.axhline(0.0, color="k", ls="dotted")
         plt.xlabel("z")
         plt.legend()
         plt.savefig(f"{run_name}.pdf", bbox_inches="tight")
 
         # Compare bulk free energy densities:
-        plt.figure(2)
-        n_bulks = torch.linspace(*n_bulk_range, 101, device=qp.rc.device)
+        plt.figure()
+        n_bulks = torch.stack(
+            [
+                torch.linspace(*n_site_range, 101, device=rc.device)
+                for n_site_range in n_bulk_range
+            ],
+            dim=-1,
+        )
         for dft_name, dft in dfts.items():
             if isinstance(dft, Minimizer):
                 f_bulks = dft.functionals[-1].get_energy_bulk(n_bulks)
@@ -90,63 +106,74 @@ def run(
             else:
                 continue
             plt.plot(
-                n_bulks.detach().to(qp.rc.cpu).numpy(),
-                f_bulks.detach().to(qp.rc.cpu).numpy(),
+                n_bulks.detach().to(rc.cpu).numpy()[..., 0],
+                f_bulks.detach().to(rc.cpu).numpy(),
                 label=dft_name,
             )
-        plt.xlabel(r"$n_{\mathrm{bulk}}$")
+        plt.xlabel(r"$n_{\mathrm{bulk}0}$")
         plt.ylabel("Free-energy density")
         plt.legend()
 
         # Visualize weight functions:
-        for dft_name, dft in dfts.items():
-            if isinstance(dft, Minimizer):
-                if isinstance((functional := dft.functionals[-1]), nn.Functional):
-                    for i_layer, layer in enumerate(functional.layers):
-                        plt.figure()
-                        w_tilde = layer.get_w_tilde(grid1d.grid, n_dim_tot=3)
-                        w = torch.fft.irfft(w_tilde).real / dz
-                        for label, style, w_set, n_nonlocal in zip(
-                            ("Even", "Odd"),
-                            ("r", "b"),
-                            w.detach().to(qp.rc.cpu).split(layer.n_weights, dim=1),
-                            layer.n_nonlocal,
-                        ):
-                            w_np = w_set[:, :n_nonlocal].flatten(0, 1).numpy()
-                            label = f"{label} weights"
-                            for i_w, w_i in enumerate(w_np):
-                                plt.plot(z1d, w_i, style, label=("" if i_w else label))
-                        plt.xlim(0, 0.5 * L)
-                        plt.xlabel("$z$")
-                        plt.ylabel("$w(z)$")
-                        plt.legend()
-                        plt.title(f"Weight functions in layer {i_layer} for {dft_name}")
-        plt.figure()
-        styles = ["b-", "r:"]
-        names = []
-        for (dft_name, dft), style in zip(dfts.items(), styles):
-            names.append(dft_name)
-            if isinstance(dft, hf.DFT):
-                k = dft.k.numpy() if dft.periodic else np.array([0.0, 1.0])
-                eig = dft.eig.detach().numpy()
-                if not dft.periodic:
-                    eig = np.repeat(eig, 2, axis=0)
-                mu = dft.mu
-                n_plot = np.max(np.where(eig < mu), axis=1)[1] + 4
-                plt.plot(k[:, ...], eig[:, :n_plot] - mu, style, label=dft_name)
-        plt.xlabel("$k$")
-        plt.ylabel(r"$\epsilon_{nk}-\mu$")
-        plt.legend(
-            [
-                Line2D([0], [0], color=styles[0][0], linestyle=styles[0][1]),
-                Line2D([0], [0], color=styles[1][0], linestyle=styles[1][1]),
-            ],
-            names,
+        plot_weights = any(
+            isinstance(dft.functionals[-1], nn.Functional) for dft in dfts.values()
         )
-        plt.axhline(0, color="k", linestyle="--")
-        # plt.show()
-        plt.savefig(f"{run_name}-eigs.pdf", bbox_inches="tight")
-        plt.close("all")
+        if plot_weights:
+            for dft_name, dft in dfts.items():
+                if isinstance(dft, Minimizer):
+                    if isinstance((functional := dft.functionals[-1]), nn.Functional):
+                        for i_layer, layer in enumerate(functional.layers):
+                            plt.figure()
+                            w_tilde = layer.get_w_tilde(grid1d.grid, n_dim_tot=3)
+                            w = torch.fft.irfft(w_tilde).real / dz
+                            for label, style, w_set, n_nonlocal in zip(
+                                ("Even", "Odd"),
+                                ("r", "b"),
+                                w.detach().to(rc.cpu).split(layer.n_weights, dim=1),
+                                layer.n_nonlocal,
+                            ):
+                                w_np = w_set[:, :n_nonlocal].flatten(0, 1).numpy()
+                                label = f"{label} weights"
+                                for i_w, w_i in enumerate(w_np):
+                                    plt.plot(
+                                        z1d, w_i, style, label=("" if i_w else label)
+                                    )
+                            plt.xlim(0, 0.5 * L)
+                            plt.xlabel("$z$")
+                            plt.ylabel("$w(z)$")
+                            plt.legend()
+                            plt.title(
+                                f"Weight functions in layer {i_layer} for {dft_name}"
+                            )
+
+        plot_bandstructures = any(isinstance(dft, hf.DFT) for dft in dfts.values())
+        if plot_bandstructures:
+            plt.figure()
+            styles = ["b-", "r:"]
+            names = []
+            for (dft_name, dft), style in zip(dfts.items(), styles):
+                names.append(dft_name)
+                if isinstance(dft, hf.DFT):
+                    k = dft.k.numpy() if dft.periodic else np.array([0.0, 1.0])
+                    eig = dft.eig.detach().numpy()
+                    if not dft.periodic:
+                        eig = np.repeat(eig, 2, axis=0)
+                    mu = dft.mu
+                    n_plot = np.max(np.where(eig < mu), axis=1)[1] + 4
+                    plt.plot(k[:, ...], eig[:, :n_plot] - mu, style, label=dft_name)
+            plt.xlabel("$k$")
+            plt.ylabel(r"$\epsilon_{nk}-\mu$")
+            plt.legend(
+                [
+                    Line2D([0], [0], color=styles[0][0], linestyle=styles[0][1]),
+                    Line2D([0], [0], color=styles[1][0], linestyle=styles[1][1]),
+                ],
+                names,
+            )
+            plt.axhline(0, color="k", linestyle="--")
+            plt.savefig(f"{run_name}-eigs.pdf", bbox_inches="tight")
+
+        plt.show()
 
 
 def main() -> None:
@@ -156,11 +183,11 @@ def main() -> None:
     in_file = sys.argv[1]
     run_name = os.path.splitext(in_file)[0]
 
-    qp.io.log_config()  # default set up to log from MPI head alone
-    qp.log.info("Using QimPy " + qp.__version__)
-    qp.rc.init()
+    io.log_config()  # default set up to log from MPI head alone
+    log.info("Using QimPy " + qimpy.__version__)
+    rc.init()
 
-    input_dict = qp.io.dict.key_cleanup(qp.io.yaml.load(in_file))
+    input_dict = io.dict.key_cleanup(io.yaml.load(in_file))
     run(**input_dict, run_name=run_name)
 
 

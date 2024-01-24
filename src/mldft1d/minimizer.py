@@ -1,28 +1,34 @@
-import qimpy as qp
-import torch
-from .grid1d import Grid1D
-from .protocols import Functional, get_mu
+from __future__ import annotations
 from typing import Sequence, Optional, Callable
 
+import torch
 
-class Minimizer(qp.algorithms.Minimize[qp.grid.FieldR]):
+from qimpy import rc, Energy
+from qimpy.io import CheckpointPath
+from qimpy.grid import FieldR
+from qimpy.algorithms import Minimize
+from .grid1d import Grid1D
+from .protocols import Functional, get_mu
+
+
+class Minimizer(Minimize[FieldR]):
 
     functionals: Sequence[Functional]  #: Pieces of the DFT functional
     grid1d: Grid1D
-    state: qp.grid.FieldR  #: Internal state of the DFT from which density is calculated
+    state: FieldR  #: Internal state of the DFT from which density is calculated
     state_to_n: Callable  #: Mapping from independent-variable `state` to density `n`
     n_to_state: Callable  #: Mapping from density `n` to independent-variable `state`
-    n_bulk: float  #: Bulk number density
-    mu: float  #: Bulk chemical potential
-    V: qp.grid.FieldR  #: External potential
-    energy: qp.Energy  #: Equilibrium energy components
+    n_bulk: torch.Tensor  #: Bulk number densities (for each site)
+    mu: torch.Tensor  #: Bulk chemical potentials (for each site)
+    V: FieldR  #: External potential (for each site)
+    energy: Energy  #: Equilibrium energy components
 
     def __init__(
         self,
         *,
         functionals: Sequence[Functional],
         grid1d: Grid1D,
-        n_bulk: float,
+        n_bulk: torch.Tensor,
         name: str,
         n_iterations: int = 1000,
         energy_threshold: float = 1e-9,
@@ -32,8 +38,8 @@ class Minimizer(qp.algorithms.Minimize[qp.grid.FieldR]):
     ) -> None:
         grid_comm = grid1d.grid.comm
         super().__init__(
-            comm=(qp.rc.MPI.COMM_SELF if (grid_comm is None) else grid_comm),
-            checkpoint_in=qp.io.CheckpointPath(),
+            comm=(rc.MPI.COMM_SELF if (grid_comm is None) else grid_comm),
+            checkpoint_in=CheckpointPath(),
             name=name,
             n_iterations=n_iterations,
             energy_threshold=energy_threshold,
@@ -45,34 +51,38 @@ class Minimizer(qp.algorithms.Minimize[qp.grid.FieldR]):
         self.grid1d = grid1d
         self.n_bulk = n_bulk
         self.mu = get_mu(functionals, n_bulk)
-        self.state = qp.grid.FieldR(
-            grid1d.grid, data=n_to_state(torch.full_like(grid1d.z, self.n_bulk))
+        self.state = FieldR(
+            grid1d.grid,
+            data=torch.einsum(
+                "s, ... -> s...", n_to_state(n_bulk), torch.ones_like(grid1d.z)
+            ),
         )
         self.state_to_n = state_to_n
         self.n_to_state = n_to_state
         self.V = self.state.zeros_like()
-        self.energy = qp.Energy()
+        self.energy = Energy()
 
     @property
-    def n(self) -> qp.grid.FieldR:
+    def n(self) -> FieldR:
         """Get current density from `state`"""
-        return qp.grid.FieldR(self.grid1d.grid, data=self.state_to_n(self.state.data))
+        return FieldR(self.grid1d.grid, data=self.state_to_n(self.state.data))
 
     @n.setter
-    def n(self, n_in: qp.grid.FieldR) -> None:
-        self.state = qp.grid.FieldR(self.grid1d.grid, data=self.n_to_state(n_in.data))
+    def n(self, n_in: FieldR) -> None:
+        self.state = FieldR(self.grid1d.grid, data=self.n_to_state(n_in.data))
 
-    def step(self, direction: qp.grid.FieldR, step_size: float) -> None:
+    def step(self, direction: FieldR, step_size: float) -> None:
         self.state += step_size * direction
 
     def compute(self, state, energy_only: bool) -> None:  # type: ignore
+        V_minus_mu = FieldR(self.V.grid, data=(self.V.data - self.mu.view(-1, 1, 1, 1)))
         if not energy_only:
             self.state.data.requires_grad = True
             self.state.data.grad = None
 
         n = self.n
         energy = self.energy
-        energy["Ext"] = n ^ (self.V - self.mu)
+        energy["Ext"] = (n ^ V_minus_mu).sum(dim=-1)
         for functional in self.functionals:
             energy[functional.__class__.__name__] = functional.get_energy(n)
         state.energy = energy
@@ -82,22 +92,20 @@ class Minimizer(qp.algorithms.Minimize[qp.grid.FieldR]):
             E = state.energy.sum_tensor()
             assert E is not None
             E.backward()  # derivative -> self.state.data.grad
-            state.gradient = qp.grid.FieldR(n.grid, data=self.state.data.grad)
+            state.gradient = FieldR(n.grid, data=self.state.data.grad)
             state.K_gradient = state.gradient
-            state.extra = [state.gradient.norm()]
+            state.extra = [state.gradient.norm().sum(dim=-1)]
             self.state.data.requires_grad = False
 
-    def random_direction(self) -> qp.grid.FieldR:
+    def random_direction(self) -> FieldR:
         grid = self.grid1d.grid
-        return qp.grid.FieldR(grid, data=torch.randn(grid.shapeR_mine))
+        return FieldR(grid, data=torch.randn(self.state.data.shape))
 
-    def known_part(self) -> Optional[tuple[float, qp.grid.FieldR]]:
-        """Return energy and potential from all but the last term."""
+    def training_targets(self) -> Optional[tuple[float, FieldR]]:
+        """Return energy and potential from only the last term."""
         n = self.n
         n.data.requires_grad = True
         n.data.grad = None
-        E = torch.tensor(0.0, device=qp.rc.device)
-        for functional in self.functionals[:-1]:
-            E += functional.get_energy(n)
+        E = self.functionals[:-1].get_energy(n)
         (E / n.grid.dV).backward()  # functional derivative -> n.data.grad
-        return E.item(), qp.grid.FieldR(n.grid, data=n.data.grad)
+        return E.item(), FieldR(n.grid, data=n.data.grad)

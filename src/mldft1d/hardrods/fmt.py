@@ -44,4 +44,4 @@ class BulkHardRods:
     T: float  #: Temperature
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
-        return -self.T * n * (1.0 - 2 * self.R * n).log()
+        return -self.T * (n * (1.0 - 2 * self.R * n).log()).sum(dim=-1)
