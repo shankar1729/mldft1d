@@ -9,8 +9,9 @@ import mldft1d
 from .. import Grid1D
 
 
-def get(grid1d: Grid1D, *, shape: str, **kwargs) -> FieldR:
-    return ~FieldH(grid1d.grid, data=_get_map[shape](grid1d, **kwargs))  # type: ignore
+def get(grid1d: Grid1D, *, shape: str, scale: float = 1.0, **kwargs) -> FieldR:
+    V = ~FieldH(grid1d.grid, data=_get_map[shape](grid1d, **kwargs))  # type: ignore
+    return scale * V
 
 
 def _get_gauss(grid1d: Grid1D, *, sigma: float) -> torch.Tensor:

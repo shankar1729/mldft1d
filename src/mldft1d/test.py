@@ -10,6 +10,7 @@ import torch
 
 import qimpy
 from qimpy import rc, log, io
+from qimpy.grid import FieldR
 from . import Grid1D, get1D, Minimizer, protocols, hardrods, kohnsham, hf, ising, nn
 from .data import v_shape
 from .kohnsham import Schrodinger, ThomasFermi
@@ -33,7 +34,7 @@ def run(
     L: float,
     dz: float,
     n_bulk: Union[float, Sequence[float]],
-    Vshape: dict,
+    Vshape: Union[dict, Sequence[dict]],
     lbda: float,
     functionals: dict,
     run_name: str,
@@ -42,16 +43,26 @@ def run(
 ):
     # Create grid and external potential:
     grid1d = Grid1D(L=L, dz=dz)
-    if Vshape["shape"] == "coulomb1d":
-        Vshape["a"] = dft_common_args["a"]
-        Vshape["periodic"] = dft_common_args["periodic"]
-    V = lbda * v_shape.get(grid1d, **io.dict.key_cleanup(Vshape))
-
-    # Create DFTs:
-    dfts = dict[str, protocols.DFT]()
+    Vshape = [Vshape] if isinstance(Vshape, dict) else Vshape
     n_bulk = torch.tensor(
         [n_bulk] if isinstance(n_bulk, float) else n_bulk, device=rc.device
     )
+    n_sites = len(n_bulk)
+    assert len(Vshape) == n_sites
+    for Vshape_i in Vshape:
+        if Vshape_i["shape"] == "coulomb1d":
+            Vshape_i["a"] = dft_common_args["a"]
+            Vshape_i["periodic"] = dft_common_args["periodic"]
+    Vdata = lbda * torch.stack(
+        [
+            v_shape.get(grid1d, **io.dict.key_cleanup(Vshape_i)).data
+            for Vshape_i in Vshape
+        ]
+    )
+    V = FieldR(grid1d.grid, data=Vdata)
+
+    # Create DFTs:
+    dfts = dict[str, protocols.DFT]()
     for label, dft_dict in functionals.items():
         for dft_name, dft_args in io.dict.key_cleanup(dft_dict).items():
             dfts[label] = make_dft_map[dft_name](
@@ -64,28 +75,33 @@ def run(
             dft.finite_difference_test(dft.random_direction())
         dft.minimize()  # equilibrium results in dft.energy and dft.n
 
+    # Report final energies etc.:
+    for dft_name, dft in dfts.items():
+        E = float(dft.energy)
+        mu = dft.mu
+        if isinstance(dft, hf.DFT):
+            eig = dft.eig.detach().numpy()
+            homo = np.max(np.where(eig < mu), axis=1)
+            lumo = np.min(np.where(eig > mu), axis=1)
+            gap = eig[lumo[0], lumo[1]] - eig[homo[0], homo[1]]
+        else:
+            gap = np.nan
+        log.info(f"{dft_name:>14s}:  mu: {io.fmt(mu)}  E: {E:>9f}  gap: {gap:>9f}")
+
     if rc.is_head:
-        # Plot density and potential:
-        plt.figure(figsize=(10, 6))
-        z1d = get1D(grid1d.z)
-        plt.plot(z1d, get1D(V.data), label="$V$")
-        for dft_name, dft in dfts.items():
-            E = float(dft.energy)
-            mu = dft.mu
-            if isinstance(dft, hf.DFT):
-                eig = dft.eig.detach().numpy()
-                homo = np.max(np.where(eig < mu), axis=1)
-                lumo = np.min(np.where(eig > mu), axis=1)
-                gap = eig[lumo[0], lumo[1]] - eig[homo[0], homo[1]]
-            else:
-                gap = np.nan
-            log.info(f"{dft_name:>14s}:  mu: {io.fmt(mu)}  E: {E:>9f}  gap: {gap:>9f}")
-            plt.plot(z1d, get1D(dft.n[0].data), label=f"$n$ ({dft_name})")
-        plt.axhline(n_bulk[0], color="k", ls="dotted")
-        plt.axhline(0.0, color="k", ls="dotted")
-        plt.xlabel("z")
-        plt.legend()
-        plt.savefig(f"{run_name}.pdf", bbox_inches="tight")
+        for i_site in range(n_sites):
+            # Plot density and potential:
+            plt.figure(figsize=(10, 6))
+            z1d = get1D(grid1d.z)
+            plt.plot(z1d, get1D(V.data[i_site]), label="$V$")
+            for dft_name, dft in dfts.items():
+                plt.plot(z1d, get1D(dft.n.data[i_site]), label=f"$n$ ({dft_name})")
+            plt.axhline(n_bulk[i_site], color="k", ls="dotted")
+            plt.axhline(0.0, color="k", ls="dotted")
+            plt.xlabel("z")
+            plt.title(f"Site {i_site}")
+            plt.legend()
+            plt.savefig(f"{run_name}_site{i_site}.pdf", bbox_inches="tight")
 
         # Compare bulk free energy densities:
         plt.figure()
@@ -113,6 +129,7 @@ def run(
         plt.xlabel(r"$n_{\mathrm{bulk}0}$")
         plt.ylabel("Free-energy density")
         plt.legend()
+        plt.savefig(f"{run_name}_EOS.pdf", bbox_inches="tight")
 
         # Visualize weight functions:
         plot_weights = any(
