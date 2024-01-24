@@ -64,7 +64,12 @@ def run(
         plt.plot(z1d, get1D(V.data), label="$V$")
         for dft_name, dft in dfts.items():
             E = float(dft.energy)
-            qp.log.info(f"{dft_name:>14s}:  mu: {dft.mu:>7f}  E: {E:>9f}")
+            mu = dft.mu
+            eig = dft.eig.detach().numpy()
+            homo = np.max(np.where(eig < mu), axis=1)
+            lumo = np.min(np.where(eig > mu), axis=1)
+            gap = eig[lumo[0], lumo[1]] - eig[homo[0], homo[1]]
+            qp.log.info(f"{dft_name:>14s}:  mu: {mu:>7f}  E: {E:>9f}  gap: {gap:>9f}")
             plt.plot(z1d, get1D(dft.n.data), label=f"$n$ ({dft_name})")
         plt.axhline(n_bulk, color="k", ls="dotted")
         plt.axhline(0.0, color="k", ls="dotted")
@@ -139,9 +144,9 @@ def run(
             names,
         )
         plt.axhline(0, color="k", linestyle="--")
-        plt.show()
+        # plt.show()
         plt.savefig(f"{run_name}-eigs.pdf", bbox_inches="tight")
-        # plt.close('all')
+        plt.close("all")
 
 
 def main() -> None:

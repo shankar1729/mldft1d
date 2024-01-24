@@ -59,6 +59,7 @@ def _get_coulomb1d(
     ionpos: list = None,
     Zs: list = None
 ) -> torch.Tensor:
+    print("IONPOS:", ionpos)
     L = grid1d.L
     if ionpos is None or len(ionpos) == 0:
         ionpos = [0.5] if fractional else [0.5 * L]  # default one atom centered
