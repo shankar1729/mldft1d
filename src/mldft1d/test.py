@@ -117,6 +117,9 @@ def run(
                 f_bulks = dft.functionals[-1].get_energy_bulk(n_bulks)
             elif isinstance(dft, Schrodinger):
                 f_bulks = ThomasFermi(dft.T).get_energy_bulk(n_bulks)
+            elif isinstance(dft, hf.DFT):
+                f_bulks = ThomasFermi(dft.T).get_energy_bulk(n_bulks)
+                f_bulks += dft.bulk_exchange(n_bulks)
             elif isinstance(dft, ising.Exact):
                 f_bulks = ising.BulkExcess(dft.T, dft.J).get_energy_bulk(n_bulks)
             else:
