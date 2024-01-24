@@ -1,8 +1,12 @@
 from __future__ import annotations
-import qimpy as qp
-import torch
-from mldft1d import Grid1D
+from typing import Union, Sequence
 from dataclasses import dataclass
+
+import torch
+
+from qimpy import rc
+from qimpy.grid import FieldR
+from .. import Grid1D
 
 
 class FMT:
@@ -13,23 +17,28 @@ class FMT:
 
     grid1d: Grid1D
     f_bulk: BulkHardRods
-    T: float  #: Temperature
-    w0_tilde: torch.Tensor  #: 0-dim weight function (surface measure of FMT in 1D)
-    w1_tilde: torch.Tensor  #: 1-dim weight function (volume measure of FMT in 1D)
+    R: torch.Tensor  #: Hard rod radii / half-lengths (one per species for mixture)
+    w0_tilde: torch.Tensor  #: 0-dim weight functions (surface measure of FMT in 1D)
+    w1_tilde: torch.Tensor  #: 1-dim weight functions (volume measure of FMT in 1D)
 
-    def __init__(self, grid1d: Grid1D, *, R: float, T: float) -> None:
+    def __init__(
+        self, grid1d: Grid1D, *, R: Union[float, Sequence[float]], T: float
+    ) -> None:
         """Initializes to bulk fluid with no external potential."""
         self.grid1d = grid1d
-        self.f_bulk = BulkHardRods(R=R, T=T)
+        self.R = torch.tensor([R] if isinstance(R, float) else R, device=rc.device)
+        self.f_bulk = BulkHardRods(R=self.R, T=T)
 
         # Initialize FMT weight functions:
-        self.w0_tilde = 2 * (grid1d.Gmag * R).cos()  # FT of w0(x) = delta(R-x)
-        self.w1_tilde = 2 * R * (grid1d.Gmag * R).sinc()  # FT of w1(x) = theta(R-x)
+        R_bcast = self.R.view(-1, 1, 1, 1)  # add dims to broadcast with Gmag
+        GR = grid1d.Gmag * R_bcast
+        self.w0_tilde = 2 * GR.cos()  # FT of w0(x) = delta(R-x)
+        self.w1_tilde = 2 * R_bcast * GR.sinc()  # FT of w1(x) = theta(R-x)
 
-    def get_energy(self, n: qp.grid.FieldR) -> torch.Tensor:
+    def get_energy(self, n: FieldR) -> torch.Tensor:
         T = self.f_bulk.T
-        n0 = n.convolve(self.w0_tilde)
-        n1 = n.convolve(self.w1_tilde)
+        n0 = sum_sites(n.convolve(self.w0_tilde))
+        n1 = sum_sites(n.convolve(self.w1_tilde))
         return (-0.5 * T) * (n0 ^ (1.0 - n1).log())
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
@@ -40,8 +49,14 @@ class FMT:
 class BulkHardRods:
     """Exact bulk free energy of hard rods fluid in 1D."""
 
-    R: float  #: Radius / half-length `R`
+    R: torch.Tensor  #: Radius / half-lengths `R` for each species in mixture
     T: float  #: Temperature
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
-        return -self.T * (n * (1.0 - 2 * self.R * n).log()).sum(dim=-1)
+        n0 = 2 * n.sum(dim=-1)
+        n1 = 2 * (n @ self.R)
+        return -0.5 * self.T * n0 * (1.0 - n1).log()
+
+
+def sum_sites(n: FieldR) -> FieldR:
+    return FieldR(n.grid, data=n.data.sum(dim=-4))
