@@ -80,15 +80,13 @@ def run(
     # Report final energies etc.:
     for dft_name, dft in dfts.items():
         E = float(dft.energy)
-        mu = dft.mu
         if isinstance(dft, hf.DFT):
-            eig = dft.eig.detach().numpy()
-            homo = np.max(np.where(eig < mu), axis=1)
-            lumo = np.min(np.where(eig > mu), axis=1)
-            gap = eig[lumo[0], lumo[1]] - eig[homo[0], homo[1]]
+            homo = dft.eig[dft.eig < dft.mu].max().item()
+            lumo = dft.eig[dft.eig > dft.mu].min().item()
+            gap = lumo - homo
         else:
             gap = np.nan
-        log.info(f"{dft_name:>14s}:  mu: {io.fmt(mu)}  E: {E:>9f}  gap: {gap:>9f}")
+        log.info(f"{dft_name:>14s}:  mu: {io.fmt(dft.mu)}  E: {E:>9f}  gap: {gap:>9f}")
 
     if rc.is_head:
         for i_site in range(n_sites):
@@ -121,7 +119,7 @@ def run(
                 f_bulks = ThomasFermi(dft.T).get_energy_bulk(n_bulks)
             elif isinstance(dft, hf.DFT):
                 f_bulks = ThomasFermi(dft.T).get_energy_bulk(n_bulks)
-                f_bulks += dft.bulk_exchange(n_bulks)
+                f_bulks += dft.bulk_exchange.get_energy_bulk(n_bulks)
             elif isinstance(dft, ising.Exact):
                 f_bulks = ising.BulkExcess(dft.T, dft.J).get_energy_bulk(n_bulks)
             else:
@@ -184,7 +182,7 @@ def run(
                     eig = dft.eig.detach().numpy()
                     if not dft.periodic:
                         eig = np.repeat(eig, 2, axis=0)
-                    mu = dft.mu
+                    mu = dft.mu.item()
                     n_plot = np.max(np.where(eig < mu), axis=1)[1] + 4
                     plt.plot(k[:, ...], eig[:, :n_plot] - mu, style, label=dft_name)
             plt.xlabel("$k$")

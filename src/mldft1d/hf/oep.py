@@ -1,10 +1,10 @@
 from __future__ import annotations
-from typing import Optional, Sequence, Union
+from typing import Union
 
-import numpy as np
 import torch
 
-from qimpy import log, MPI
+from qimpy import MPI
+from qimpy.io import CheckpointPath
 from qimpy.algorithms import Minimize, MinimizeState
 
 from .. import hf
@@ -35,7 +35,7 @@ class OEP(Minimize[torch.Tensor]):
     ) -> None:
         self.dft = dft
         super().__init__(
-            checkpoint_in=None,
+            checkpoint_in=CheckpointPath(),
             comm=MPI.COMM_SELF,
             name="Relax OEP",
             i_iter_start=0,
@@ -73,20 +73,22 @@ class OEP(Minimize[torch.Tensor]):
             assert E is not None
             E.backward()  # partial derivative dE/dVks -> self.Vks.data.grad
             Vks.requires_grad = False
+            assert Vks.grad is not None
             state.gradient = Vks.grad
             state.K_gradient = Vks.grad  # preconditioner
         state.energy = dft.energy
 
+    """
     def finite_difference_test(
         self, direction: torch.Tensor, step_sizes: Optional[Sequence[float]] = None
     ) -> None:
-        """Check gradient implementation by taking steps along `direction`.
+        '''Check gradient implementation by taking steps along `direction`.
         This will print ratio of actual energy differences along steps of
         various sizes in `step_sizes` and the expected energy difference
         based on the gradient. A correct implementation should show a ratio
         approaching 1 for a range of step sizes, with deviations at lower
         step sizes due to round off error and at higher step sizes due to
-        nonlinearity."""
+        nonlinearity.'''
         log.info(f'{self.name}: {"-" * 12} Finite difference test {"-" * 12}')
         if step_sizes is None:
             step_sizes = np.logspace(-9, 1, 11).tolist()
@@ -111,3 +113,4 @@ class OEP(Minimize[torch.Tensor]):
         log.info(f'{self.name}: {"-" * 48}')
         # Restore original position:
         self.step(direction, -step_size_prev)
+    """

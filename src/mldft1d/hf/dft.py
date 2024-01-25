@@ -23,11 +23,11 @@ class DFT:
 
     grid1d: Grid1D
     exchange_functional: Optional[Functional]  #: Ex[n], and Exx[psi] if None
-    n_bulk: float  #: Bulk number density of the fluid
+    n_bulk: torch.Tensor  #: Bulk number density of the fluid
     n_electrons: float  #: Electron number/cell
     bulk_exchange: BulkExchange  #: Bulk exchange energy density
     soft_coulomb: SoftCoulomb  #: 1D Soft-Coulomb interaction kernel
-    mu: float  #: Bulk chemical potential (fixed when n_electrons is zero)
+    mu: torch.Tensor  #: Bulk chemical potential
     T: float  #: Fermi smearing width
     periodic: bool  #: Whether the system is periodic (crystal) or isolated (molecule)
     n: FieldR  #: Equilibrium density
@@ -50,7 +50,7 @@ class DFT:
         grid1d: Grid1D,
         *,
         exchange_functional: Union[str, Functional],
-        n_bulk: float,
+        n_bulk: torch.Tensor,
         T: float,
         a: float = 1.0,
         periodic: bool = True,
@@ -61,10 +61,10 @@ class DFT:
         self.n_bulk = n_bulk
         self.bulk_exchange = BulkExchange(a)
         self.soft_coulomb = SoftCoulomb(a)
-        self.n_electrons = n_bulk * grid1d.L
+        self.n_electrons = n_bulk.item() * grid1d.L
         self.T = T
         self.periodic = periodic
-        self.n = FieldR(grid1d.grid, data=torch.ones_like(grid1d.z) * n_bulk)
+        self.n = FieldR(grid1d.grid, data=n_bulk.repeat((1,) + grid1d.z.shape))
         self.V = self.n.zeros_like()
         self.energy = Energy()
         if isinstance(exchange_functional, str):
@@ -142,7 +142,7 @@ class DFT:
         """Update electron density from wavefunctions and fillings."""
         self.n.data = (self.wk / self.grid1d.L) * torch.einsum(
             "kb, kbz -> z", self.f, abs_squared(self.to_real_space(self.C))
-        )[None, None]
+        ).view(1, 1, 1, -1)
 
     def update_potential(self, requires_grad: bool = True) -> None:
         """Update density-dependent energy terms and electron potential.
@@ -152,8 +152,9 @@ class DFT:
             n.data.requires_grad = True
             n.data.grad = None
         energy = self.energy
-        energy["EH"] = 0.5 * (n ^ n.convolve(self.coulomb_tilde))
-        energy["Eext"] = n ^ self.V
+        rho_tot = FieldR(n.grid, data=n.data.sum(dim=-4))  # charge density
+        energy["EH"] = 0.5 * (rho_tot ^ rho_tot.convolve(self.coulomb_tilde))
+        energy["Eext"] = (n ^ self.V).sum(dim=-1)
         if self.exchange_functional is not None:
             energy["Ex"] = self.exchange_functional.get_energy(n)
 
@@ -173,7 +174,7 @@ class DFT:
             fbar, fbar.clamp(min=FTOL)
         )  # Entropy
         self.energy["-TS"] = -self.T * S.sum() * self.wk
-        self.mu = mu.item()
+        self.mu = mu.detach().clone()
         log.info(
             f"  FillingsUpdate:  mu: {self.mu:.9f}  n_electrons: {self.n_electrons:.6f}"
         )
@@ -212,9 +213,10 @@ class DFT:
     def initialize_state(self) -> None:
         # Staring point analgous to LCAO:
         self.update_potential()
+        assert self.n.data.grad is not None
         Vks = self.n.data.grad.flatten() / self.grid1d.grid.dV  # convert from dE/dn
         self.C, self.eig = self.diagonalize(Vks)
-        self.mu = self.eig.min().item()  # initial value before update_fillings
+        self.mu = self.eig.min()  # initial value before update_fillings
         self.update_fillings()
 
     def compute_exx(self, C: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
@@ -228,7 +230,7 @@ class DFT:
             else zip(k, IC, f)
         ):
             # for k2, IC2, f2 in zip(k, IC, f):
-            iq = torch.round((k - k1.item()) / dk).to(int)
+            iq = torch.round((k - k1.item()) / dk).to(torch.int)
             K = self.Kx_tilde[iq]
             n12 = torch.einsum("ax, kbx -> kabx", IC1.conj(), IC)
             n12tilde = torch.fft.fft(n12, norm="forward")
@@ -249,8 +251,7 @@ class DFT:
         log.info(f"\nEnergy components:\n{self.energy}\n")
         return self.energy
 
-    def known_part(self) -> Optional[tuple[float, FieldR]]:
-        """Known part of equilibrium energy and potential eg. ideal gas, if any."""
+    def training_targets(self) -> tuple[float, FieldR]:
         return NotImplemented
 
 
@@ -292,6 +293,7 @@ class SCF(Pulay[FieldH]):
         dft = self.dft
         Nbands = dft.f.shape[1]
         eig_prev = dft.eig[:, :Nbands]
+        assert dft.n.data.grad is not None
         Vks = dft.n.data.grad.flatten() / dft.grid1d.grid.dV  # convert from dE/dn
         dft.C, dft.eig = dft.diagonalize(Vks)
         dft.update()  # update total energy

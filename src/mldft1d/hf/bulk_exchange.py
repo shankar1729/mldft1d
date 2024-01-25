@@ -30,15 +30,19 @@ class BulkExchange:
         self.integrand0 = torch.log(self.quad_nodes)
         self.singular_part = 3 - np.log(4)
 
-    def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
+    def evaluate(self, n: torch.Tensor) -> torch.Tensor:
+        """Internal element-wise evaluation, without summing over spin channels."""
         kFa = (0.5 * np.pi * self.a) * n
         integrand = torch.special.modified_bessel_k0(kFa[..., None] * self.quad_nodes)
         integral = (integrand + self.integrand0) @ self.quad_weights
         return -(0.5 * n).square() * (integral + self.singular_part)
 
+    def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
+        return self.evaluate(n).sum(dim=-1)
+
     def get_energy(self, n: FieldR) -> torch.Tensor:
         """Energy of inhomogeneous system in a local-density approximation."""
-        energy_density = FieldR(n.grid, data=self.get_energy_bulk(n.data))
+        energy_density = FieldR(n.grid, data=self.evaluate(n.data).sum(dim=-4))
         return energy_density.integral()
 
 
