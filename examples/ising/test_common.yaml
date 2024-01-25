@@ -1,4 +1,4 @@
-n_bulk_range: [0.001, 0.999]
+n_bulk_range: [[0.001, 0.999]]
 
 functionals:
   Exact-T0.6:

@@ -1,68 +1,75 @@
-import qimpy as qp
+from __future__ import annotations
+from typing import Optional
+from dataclasses import dataclass
+
 import numpy as np
+from scipy.optimize import fsolve
+import torch
+
+from qimpy import rc, Energy
+from qimpy.grid import FieldR
 from .. import Grid1D
 from ..protocols import get_mu
 from .ideal_spin_gas import IdealSpinGas
-from scipy.optimize import fsolve
-from typing import Optional
-from dataclasses import dataclass
-import torch
 
 
 class Exact:
     """Exact 1D Ising model solver."""
 
     grid1d: Grid1D
-    n_bulk: float  #: Bulk number density of the fluid
+    n_bulk: torch.Tensor  #: Bulk number density of the fluid
     T: float  #: Fermi smearing width
     J: float  #: Exchange interaction
-    mu: float  #: Bulk chemical potential
-    n: qp.grid.FieldR  #: Equilibrium density
-    V: qp.grid.FieldR  #: External potential
-    energy: qp.Energy  #: Equilibrium energy components
+    mu: torch.Tensor  #: Bulk chemical potential
+    n: FieldR  #: Equilibrium density
+    V: FieldR  #: External potential
+    energy: Energy  #: Equilibrium energy components
 
-    def __init__(self, grid1d: Grid1D, *, n_bulk: float, T: float, J: float) -> None:
+    def __init__(
+        self, grid1d: Grid1D, *, n_bulk: torch.Tensor, T: float, J: float
+    ) -> None:
         """Initializes to bulk fluid with no external potential."""
         self.grid1d = grid1d
         self.n_bulk = n_bulk
         self.T = T
         self.J = J
         self.mu = get_mu([IdealSpinGas(T), BulkExcess(T, J)], n_bulk)
-        self.n = qp.grid.FieldR(
+        self.n = FieldR(
             grid1d.grid,
-            data=torch.full(grid1d.grid.shapeR_mine, n_bulk, device=qp.rc.device),
+            data=n_bulk.view(-1, 1, 1, 1).repeat((1,) + grid1d.grid.shapeR_mine),
         )
         self.V = self.n.zeros_like()
-        self.energy = qp.Energy()
+        self.energy = Energy()
 
-    def known_part(self) -> Optional[tuple[float, qp.grid.FieldR]]:
+    def known_part(self) -> Optional[tuple[float, FieldR]]:
         """Return ideal gas as known part."""
         n = self.n.clone()
         n.data.requires_grad = True
         n.data.grad = None
         E = IdealSpinGas(self.T).get_energy(n)
         (E / n.grid.dV).backward()  # functional derivative -> n.data.grad
-        return E.item(), qp.grid.FieldR(n.grid, data=n.data.grad)
+        return E.item(), FieldR(n.grid, data=n.data.grad)
 
-    def minimize(self) -> qp.Energy:
+    def minimize(self) -> Energy:
         # Compute density:
-        n = self.n.data[0, 0]
+        n = self.n.data[0, 0, 0]
         n[:] = self.unmap(fsolve(self.root_function, self.map(n)))
 
         # Compute energy by numerically integrating exact potential = -dEint/dn:
         energy = self.energy
         n_steps = 100  # number of integration steps
-        n_ref = n.mean()
+        n_ref = n.mean()[None]
         E_ref = self.grid1d.L * (
             IdealSpinGas(self.T).get_energy_bulk(n_ref).item()
             + BulkExcess(self.T, self.J).get_energy_bulk(n_ref).item()
         )
         dn = (n - n_ref) / n_steps
-        i_step = torch.arange(n_steps, device=qp.rc.device) + 0.5  # interval midpoints
+        i_step = torch.arange(n_steps, device=rc.device) + 0.5  # interval midpoints
         n_path = n_ref + torch.outer(i_step, dn)
         V_path = self.exact_potential(n_path)
+        V_minus_mu = FieldR(self.V.grid, data=(self.V.data - self.mu.view(-1, 1, 1, 1)))
         energy["Int"] = E_ref + (V_path @ dn).sum().item() * (-self.grid1d.dz)
-        energy["Ext"] = ((self.V - self.mu) ^ self.n).sum().item()
+        energy["Ext"] = (V_minus_mu ^ self.n).sum().item()
         return energy
 
     def E(self, n: torch.Tensor, n_prime: torch.Tensor) -> torch.Tensor:
@@ -89,19 +96,19 @@ class Exact:
     @staticmethod
     def map(n: torch.Tensor) -> np.ndarray:
         """Map n on (0, 1) to independent variable on (-infty, infty)."""
-        return torch.special.logit(n).to(qp.rc.cpu).numpy()
+        return torch.special.logit(n).to(rc.cpu).numpy()
 
     @staticmethod
     def unmap(n_mapped: np.ndarray) -> torch.Tensor:
         """Inverse of `map`."""
-        return torch.special.expit(torch.from_numpy(n_mapped).to(qp.rc.device))
+        return torch.special.expit(torch.from_numpy(n_mapped).to(rc.device))
 
     def root_function(self, n_mapped: np.ndarray) -> np.ndarray:
         """Eq. 22 of Percus ref. cast as a root function to solve for n."""
         n = Exact.unmap(n_mapped)
-        V = self.V.data[0, 0]
+        V = self.V.data[0, 0, 0]
         V_error = self.exact_potential(n) - (V - self.mu)
-        return V_error.to(qp.rc.cpu).numpy()
+        return V_error.to(rc.cpu).numpy()
 
 
 @dataclass
@@ -111,7 +118,8 @@ class BulkExcess:
     T: float
     J: float
 
-    def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
+    def get_energy_bulk(self, n_in: torch.Tensor) -> torch.Tensor:
+        n = n_in[..., 0]
         e = np.exp(-self.J / self.T)
         f = e - 1
         E = 2 * n - 1 + torch.sqrt(1 + 4 * f * n * (1 - n))

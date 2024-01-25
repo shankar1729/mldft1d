@@ -138,7 +138,11 @@ def run(
 
         # Visualize weight functions:
         plot_weights = any(
-            isinstance(dft.functionals[-1], nn.Functional) for dft in dfts.values()
+            (
+                isinstance(dft, Minimizer)
+                and isinstance(dft.functionals[-1], nn.Functional)
+            )
+            for dft in dfts.values()
         )
         if plot_weights:
             for dft_name, dft in dfts.items():
