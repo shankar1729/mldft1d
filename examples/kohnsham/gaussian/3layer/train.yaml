@@ -35,3 +35,4 @@ train:
   method: Adam
   lr: 1.0E-3
   weight-decay: 1.0E-3
+  foreach: no  # to circumvent bug in Adam in pytorch 2.1

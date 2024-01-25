@@ -1,37 +1,44 @@
-import qimpy as qp
+from __future__ import annotations
+from typing import Optional
+
 import numpy as np
+import torch
+
+from qimpy import rc, Energy
+from qimpy.math import abs_squared
+from qimpy.grid import FieldR
 from .. import Grid1D
 from ..protocols import get_mu
-from typing import Optional
-import torch
 
 
 class Schrodinger:
     """Exact 1D Schrodinger solver"""
 
     grid1d: Grid1D
-    n_bulk: float  #: Bulk number density of the fluid
-    mu: float  #: Bulk chemical potential
+    n_bulk: torch.Tensor  #: Bulk number density of the fluid
+    mu: torch.Tensor  #: Bulk chemical potential
     T: float  #: Fermi smearing width
-    n: qp.grid.FieldR  #: Equilibrium density
-    V: qp.grid.FieldR  #: External potential
-    energy: qp.Energy  #: Equilibrium energy components
+    n: FieldR  #: Equilibrium density
+    V: FieldR  #: External potential
+    energy: Energy  #: Equilibrium energy components
 
-    def __init__(self, grid1d: Grid1D, *, n_bulk: float, T: float) -> None:
+    def __init__(self, grid1d: Grid1D, *, n_bulk: torch.Tensor, T: float) -> None:
         """Initializes to bulk fluid with no external potential."""
         self.grid1d = grid1d
         self.n_bulk = n_bulk
         self.mu = get_mu([ThomasFermi(T)], n_bulk)
         self.T = T
-        self.n = qp.grid.FieldR(grid1d.grid, data=torch.zeros_like(grid1d.z))
+        self.n = FieldR(
+            grid1d.grid, data=torch.zeros((1,) + grid1d.z.shape, device=rc.device)
+        )
         self.V = self.n.zeros_like()
-        self.energy = qp.Energy()
+        self.energy = Energy()
 
-    def known_part(self) -> Optional[tuple[float, qp.grid.FieldR]]:
+    def known_part(self) -> Optional[tuple[float, FieldR]]:
         """No known part: learn the entire part in ML."""
         return None
 
-    def minimize(self) -> qp.Energy:
+    def minimize(self) -> Energy:
         Nk = 2 * np.ceil(2 * np.pi / (self.grid1d.L * self.T))  # assuming vF ~ 1
         k = np.arange(Nk // 2 + 1) * (1.0 / Nk)  # in fractional coords, symm reduced
         wk = np.where(k, 2, 1) * (2.0 / Nk)  # weight of each k-point
@@ -44,7 +51,7 @@ class Schrodinger:
             self.accumulate_k(ki, wki)
 
         # Move V.n energy from KE to Ext component:
-        V_dot_n = self.V ^ self.n
+        V_dot_n = (self.V ^ self.n).sum(dim=-1)
         energy["KE"] -= V_dot_n
         energy["Ext"] += V_dot_n
         return energy
@@ -88,10 +95,10 @@ class Schrodinger:
 
         # Compute density contributions:
         psi_tilde = torch.zeros(
-            (n_bands, Nz), dtype=psi_reduced.dtype, device=qp.rc.device
+            (n_bands, Nz), dtype=psi_reduced.dtype, device=rc.device
         )
         psi_tilde[:, iG] = psi_reduced.T
-        psi_sqr = qp.math.abs_squared(torch.fft.fft(psi_tilde))
+        psi_sqr = abs_squared(torch.fft.fft(psi_tilde))
         self.n.data += (wk / L) * (f @ psi_sqr)[None, None, :]
 
 
@@ -109,7 +116,7 @@ class ThomasFermi:
         e = self.prefactor * (n**3)  # Thomas-Fermi (T=0) part in 1D
         if self.T:
             e += n * self.energy_correction_per_particle(n)
-        return e
+        return e.sum(dim=-1)
 
     def energy_correction_per_particle(self, n: torch.Tensor) -> torch.Tensor:
         x = n.square() / (2 * self.T)
