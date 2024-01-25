@@ -43,10 +43,10 @@ def run(
 ):
     # Check site density / potential counts:
     Vshape = [Vshape] if isinstance(Vshape, dict) else Vshape
-    n_bulk = torch.tensor(
+    n_bulks = torch.tensor(
         [n_bulk] if isinstance(n_bulk, float) else n_bulk, device=rc.device
     )
-    n_sites = len(n_bulk)
+    n_sites = len(n_bulks)
     assert len(Vshape) == n_sites
 
     # Create grid and external potential:
@@ -68,7 +68,7 @@ def run(
     for label, dft_dict in functionals.items():
         for dft_name, dft_args in io.dict.key_cleanup(dft_dict).items():
             dfts[label] = make_dft_map[dft_name](
-                grid1d=grid1d, n_bulk=n_bulk, **dft_args, **dft_common_args
+                grid1d=grid1d, n_bulk=n_bulks, **dft_args, **dft_common_args
             )
 
     for dft in dfts.values():
@@ -98,7 +98,7 @@ def run(
             plt.plot(z1d, get1D(V.data[i_site]), label="$V$")
             for dft_name, dft in dfts.items():
                 plt.plot(z1d, get1D(dft.n.data[i_site]), label=f"$n$ ({dft_name})")
-            plt.axhline(n_bulk[i_site], color="k", ls="dotted")
+            plt.axhline(n_bulks[i_site], color="k", ls="dotted")
             plt.axhline(0.0, color="k", ls="dotted")
             plt.xlabel("z")
             plt.title(f"Site {i_site}")

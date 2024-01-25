@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Protocol, Sequence, Optional
+from typing import Protocol, Sequence
 
 import torch
 
@@ -38,7 +38,7 @@ class DFT(Protocol):
     def minimize(self) -> Energy:
         """Solve Euler-Lagrange equation and return equilibrium energy."""
 
-    def training_targets(self) -> Optional[tuple[float, FieldR]]:
+    def training_targets(self) -> tuple[float, FieldR]:
         """Target part of equilibrium energy and potential for ML potentials, if any."""
 
 

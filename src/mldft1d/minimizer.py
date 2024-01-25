@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Sequence, Optional, Callable
+from typing import Sequence, Callable
 
 import torch
 
@@ -101,7 +101,7 @@ class Minimizer(Minimize[FieldR]):
         grid = self.grid1d.grid
         return FieldR(grid, data=torch.randn(self.state.data.shape))
 
-    def training_targets(self) -> Optional[tuple[float, FieldR]]:
+    def training_targets(self) -> tuple[float, FieldR]:
         """Return energy and potential from only the last term."""
         n = self.n
         n.data.requires_grad = True

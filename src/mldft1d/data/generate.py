@@ -37,14 +37,14 @@ def run(
 
     # Check site density / potential counts:
     Vshape = [Vshape] if isinstance(Vshape, dict) else Vshape
-    n_bulk = torch.tensor(
+    n_bulks = torch.tensor(
         [n_bulk] if isinstance(n_bulk, float) else n_bulk, device=rc.device
     )
-    n_sites = len(n_bulk)
+    n_sites = len(n_bulks)
     assert len(Vshape) == n_sites
 
     grid1d = Grid1D(L=L, dz=dz, parallel=False)
-    dft = make_exact_dft_map[functional](grid1d=grid1d, n_bulk=n_bulk, **dft_kwargs)
+    dft = make_exact_dft_map[functional](grid1d=grid1d, n_bulk=n_bulks, **dft_kwargs)
     n0 = dft.n
 
     log.info(f"mu = {dft.mu}")
@@ -148,7 +148,7 @@ def sample_dict(d: dict[str, Any]) -> dict[str, Any]:
 
 def sample_list(d: list) -> list:
     """Recursively sample Sampler objects within a list"""
-    output = []
+    output: list[Any] = []
     for value in d:
         if isinstance(value, dict):
             output.append(sample_dict(value))

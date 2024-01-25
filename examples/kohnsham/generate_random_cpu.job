@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -N 4 -n 8 -c 8 --hint=nomultithread -o generate_random.log
+#SBATCH -N 4 -n 64 -c 1 --hint=nomultithread -o generate_random.log
 
 module load openmpi venv/qimpy
 

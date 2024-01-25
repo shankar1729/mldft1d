@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Optional
 from dataclasses import dataclass
 
 import numpy as np
@@ -41,7 +40,7 @@ class Exact:
         self.V = self.n.zeros_like()
         self.energy = Energy()
 
-    def training_targets(self) -> Optional[tuple[float, FieldR]]:
+    def training_targets(self) -> tuple[float, FieldR]:
         """Return ideal gas as known part."""
         n = self.n.clone()
         n.data.requires_grad = True

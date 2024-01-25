@@ -1,4 +1,5 @@
-from typing import Dict, Any
+from __future__ import annotations
+from typing import Dict, Any, Optional
 
 import torch
 import numpy as np
@@ -57,8 +58,8 @@ def _get_coulomb1d(
     a: float = 1.0,
     periodic: bool = True,
     fractional: bool = True,
-    ionpos: list = None,
-    Zs: list = None
+    ionpos: Optional[list] = None,
+    Zs: Optional[list] = None,
 ) -> torch.Tensor:
     L = grid1d.L
     if ionpos is None or len(ionpos) == 0:

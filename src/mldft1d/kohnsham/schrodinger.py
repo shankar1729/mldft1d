@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Optional
 
 import numpy as np
 import torch
@@ -34,9 +33,10 @@ class Schrodinger:
         self.V = self.n.zeros_like()
         self.energy = Energy()
 
-    def known_part(self) -> Optional[tuple[float, FieldR]]:
-        """No known part: learn the entire part in ML."""
-        return None
+    def training_targets(self) -> tuple[float, FieldR]:
+        KE = float(self.energy["KE"])
+        V_kinetic = FieldR(self.V.grid, data=(self.mu.view(-1, 1, 1, 1) - self.V.data))
+        return KE, V_kinetic
 
     def minimize(self) -> Energy:
         Nk = 2 * np.ceil(2 * np.pi / (self.grid1d.L * self.T))  # assuming vF ~ 1
