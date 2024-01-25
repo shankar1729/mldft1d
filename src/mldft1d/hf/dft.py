@@ -10,6 +10,7 @@ from qimpy import log, rc, MPI, Energy
 from qimpy.io import CheckpointPath
 from qimpy.grid import FieldR, FieldH
 from qimpy.algorithms import Pulay
+from qimpy.profiler import stopwatch
 from qimpy.math import abs_squared
 
 from .. import Grid1D
@@ -53,6 +54,7 @@ class DFT:
         n_bulk: torch.Tensor,
         T: float,
         a: float = 1.0,
+        Lsup: float = 200.0,
         periodic: bool = True,
     ) -> None:
         comm = grid1d.grid.comm
@@ -91,7 +93,7 @@ class DFT:
 
         # Setup k-points:
         if self.periodic:
-            Nk = 2 * int(np.ceil(2 * np.pi / (self.grid1d.L * self.T)))  # for vF ~ 1
+            Nk = 2 * int(np.ceil(0.5 * Lsup / self.grid1d.L))
             dk = 1.0 / Nk
             self.k = torch.arange(0.5 * dk, 0.5, dk, device=rc.device)  # off-Gamma
             self.wk = 4 * dk  # weight of each k-point (2 for symm, 2 for spin)
@@ -198,6 +200,7 @@ class DFT:
         if self.exchange_functional is None:
             self.energy["Ex"] = self.compute_exx(self.C, self.f)
 
+    @stopwatch
     def diagonalize(self, Vks: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Compute eigenvectors C and eigenvalues eig in current potential `n.grad`"""
         H = torch.diag_embed(self.ke).to(torch.complex128)
@@ -219,6 +222,7 @@ class DFT:
         self.mu = self.eig.min()  # initial value before update_fillings
         self.update_fillings()
 
+    @stopwatch
     def compute_exx(self, C: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
         k = self.k
         dk = (k[1] - k[0]).item() if self.periodic else 1.0

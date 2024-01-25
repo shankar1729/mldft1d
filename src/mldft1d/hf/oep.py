@@ -5,6 +5,7 @@ from qimpy import MPI
 from qimpy.io import CheckpointPath
 from qimpy.grid import FieldR
 from qimpy.algorithms import Minimize, MinimizeState
+from qimpy.profiler import StopWatch
 
 from .. import hf
 
@@ -68,7 +69,9 @@ class OEP(Minimize[FieldR]):
         E = dft.energy.sum_tensor()
         if not energy_only:
             assert E is not None
+            watch = StopWatch("OEP.Vks_grad")
             E.backward()  # partial derivative dE/dVks -> self.Vks.data.grad
+            watch.stop()
             Vks.data.requires_grad = False
             assert Vks.data.grad is not None
             state.gradient = FieldR(Vks.grid, data=Vks.data.grad)
