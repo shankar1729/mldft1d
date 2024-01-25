@@ -6,10 +6,9 @@ from scipy.stats import lognorm, randint, loguniform
 qp.io.log_config()  # default set up to log from MPI head alone
 qp.log.info("Using QimPy " + qp.__version__)
 qp.rc.init()
-np.random.seed(3)
 
 batch(
-    n_batch=1,
+    n_batch=1000,
     prefix="random_data/random",
     functional="hf",
     L=Choice(np.arange(4.0, 20.0, 0.2)),
@@ -24,3 +23,6 @@ batch(
     lbda=dict(min=0.0, max=5.0, step=0.2),
     periodic=True,
 )
+
+qp.rc.report_end()
+qp.profiler.StopWatch.print_stats()
