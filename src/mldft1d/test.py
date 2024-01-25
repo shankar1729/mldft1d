@@ -11,6 +11,7 @@ import torch
 import qimpy
 from qimpy import rc, log, io
 from qimpy.grid import FieldR
+from qimpy.profiler import StopWatch
 from . import Grid1D, get1D, Minimizer, protocols, hardrods, kohnsham, hf, ising, nn
 from .data import v_shape
 from .kohnsham import Schrodinger, ThomasFermi
@@ -197,6 +198,8 @@ def run(
             plt.axhline(0, color="k", linestyle="--")
             plt.savefig(f"{run_name}-eigs.pdf", bbox_inches="tight")
 
+        rc.report_end()
+        StopWatch.print_stats()
         plt.show()
 
 
