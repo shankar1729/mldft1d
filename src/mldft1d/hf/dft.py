@@ -305,10 +305,9 @@ class SCF(Pulay[FieldH]):
 
     def initialize_kernels(self, q_kerker: float, q_metric: float) -> None:
         """Initialize preconditioner and metric."""
-        grid = self.dft.grid1d.grid
-        iG = grid.get_mesh("H").to(torch.double)  # half-space
-        wG = grid.lattice.volume * grid.weight2H  # integration weight
-        Gmag = ((iG @ grid.lattice.Gbasis.T) ** 2).sum(dim=-1).sqrt()
+        grid1d = self.dft.grid1d
+        wG = grid1d.L * grid1d.grid.weight2H  # integration weight
+        Gmag = grid1d.Gmag
         Gmag_reg = torch.clamp(Gmag, min=Gmag[Gmag > 0.0].min())  # regularized
         invCoul = Gmag_reg**2  # self.dft.soft_coulomb.tilde(Gmag_reg) / (4 * np.pi)#
         self.K_kerker = invCoul / (invCoul + q_kerker**2)

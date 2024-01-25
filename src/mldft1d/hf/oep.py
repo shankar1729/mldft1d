@@ -20,14 +20,13 @@ class OEP(Minimize[FieldR]):
         self,
         dft: hf.DFT,
         *,
-        # comm: MPI.Comm,
         n_iterations: int = 2000,
-        energy_threshold: float = 1e-7,
-        n_consecutive: int = 1,
+        energy_threshold: float = 1e-8,
+        n_consecutive: int = 2,
         method: str = "l-bfgs",
         cg_type: str = "polak-ribiere",
         line_minimize: str = "auto",
-        n_history: int = 15,
+        n_history: int = 100,
         converge_on: Union[str, int] = "all",
     ) -> None:
         self.dft = dft
@@ -71,5 +70,5 @@ class OEP(Minimize[FieldR]):
             Vks.data.requires_grad = False
             assert Vks.data.grad is not None
             state.gradient = FieldR(Vks.grid, data=Vks.data.grad)
-            state.K_gradient = state.gradient  # preconditioner
+            state.K_gradient = state.gradient
         state.energy = dft.energy
