@@ -13,13 +13,14 @@ from qimpy.mpi import TaskDivision
 from qimpy.grid import FieldR
 from .. import Grid1D, get1D
 from . import v_shape
-from .. import hardrods, kohnsham, ising, protocols
+from .. import hardrods, kohnsham, ising, hf, protocols
 
 
 make_exact_dft_map: dict[str, Callable[..., protocols.DFT]] = {
     "hardrods": hardrods.make_dft.exact,
     "kohnsham": kohnsham.make_dft.exact,
     "ising": ising.make_dft.exact,
+    "hf": hf.make_dft.exact,
 }  #: Recognized exact DFTs that can be used for data generation
 
 
@@ -46,8 +47,6 @@ def run(
     grid1d = Grid1D(L=L, dz=dz, parallel=False)
     dft = make_exact_dft_map[functional](grid1d=grid1d, n_bulk=n_bulks, **dft_kwargs)
     n0 = dft.n
-
-    log.info(f"mu = {dft.mu}")
 
     # Initialize potential shape:
     Vdata = torch.stack(

@@ -252,7 +252,12 @@ class DFT:
         return self.energy
 
     def training_targets(self) -> tuple[float, FieldR]:
-        return NotImplemented
+        assert self.exchange_functional is None  # only makes sense for exact
+        Exx = float(self.energy["Ex"])
+        V_minus_mu = FieldR(self.V.grid, data=(self.V.data - self.mu.view(-1, 1, 1, 1)))
+        VH = self.n.convolve(self.coulomb_tilde)
+        Vxx = self.oep.Vks - VH - V_minus_mu
+        return Exx, Vxx
 
 
 class SCF(Pulay[FieldH]):
