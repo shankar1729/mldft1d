@@ -97,7 +97,7 @@ def run(
             plt.plot(z1d, get1D(V.data[i_site]), label="$V$")
             for dft_name, dft in dfts.items():
                 plt.plot(z1d, get1D(dft.n.data[i_site]), label=f"$n$ ({dft_name})")
-            plt.axhline(n_bulks[i_site], color="k", ls="dotted")
+            plt.axhline(n_bulks[i_site].item(), color="k", ls="dotted")
             plt.axhline(0.0, color="k", ls="dotted")
             plt.xlabel("z")
             plt.title(f"Site {i_site}")
@@ -180,7 +180,7 @@ def run(
                 names.append(dft_name)
                 if isinstance(dft, hf.DFT):
                     k = dft.k.numpy() if dft.periodic else np.array([0.0, 1.0])
-                    eig = dft.eig.detach().numpy()
+                    eig = dft.eig.detach().to(rc.cpu).numpy()
                     if not dft.periodic:
                         eig = np.repeat(eig, 2, axis=0)
                     mu = dft.mu.item()

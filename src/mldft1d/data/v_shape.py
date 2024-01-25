@@ -62,6 +62,8 @@ def _get_coulomb1d(
     Zs: Optional[list] = None,
 ) -> torch.Tensor:
     L = grid1d.L
+    Nz = grid1d.grid.shape[2]
+    dz = grid1d.dz
     if ionpos is None or len(ionpos) == 0:
         ionpos = [0.5] if fractional else [0.5 * L]  # default one atom centered
     if Zs is None or len(Zs) == 0:
@@ -73,11 +75,9 @@ def _get_coulomb1d(
     V1 = (
         soft_coulomb.periodic_kernel(grid1d.Gmag)
         if periodic
-        else soft_coulomb.truncated_kernel(grid1d.grid.shape[2], grid1d.dz, real=True)[
-            None, None, :
-        ]
+        else soft_coulomb.truncated_kernel(Nz, dz, real=True)[None, None, :]
     )
-    V = torch.zeros(V1.shape, dtype=torch.complex128)
+    V = torch.zeros(V1.shape, dtype=torch.complex128, device=V1.device)
     for _ionx, _Z in zip(ionpos, Zs):
         trans = _ionx if fractional else _ionx / L
         translation_phase = ((2j * np.pi) * grid1d.iGz * -trans).exp()

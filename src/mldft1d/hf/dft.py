@@ -124,7 +124,7 @@ class DFT:
         # Initialize truncated kernel for exact exchange:
         Kx_sup_tilde = self.soft_coulomb.truncated_kernel(Nz * Nk, dz, real=False)
         # --- split supercell kernel by integer q offsets
-        self.Kx_tilde = torch.zeros((2 * Nk - 1, Nz))
+        self.Kx_tilde = torch.zeros((2 * Nk - 1, Nz), device=rc.device)
         self.Kx_tilde[0] = Kx_sup_tilde[::Nk]
         for iq in range(1, Nk):
             Kx_cur = Kx_sup_tilde[iq::Nk]
