@@ -41,14 +41,16 @@ class Exact:
         self.V = self.n.zeros_like()
         self.energy = Energy()
 
-    def known_part(self) -> Optional[tuple[float, FieldR]]:
+    def training_targets(self) -> Optional[tuple[float, FieldR]]:
         """Return ideal gas as known part."""
         n = self.n.clone()
         n.data.requires_grad = True
         n.data.grad = None
-        E = IdealSpinGas(self.T).get_energy(n)
-        (E / n.grid.dV).backward()  # functional derivative -> n.data.grad
-        return E.item(), FieldR(n.grid, data=n.data.grad)
+        Eideal = IdealSpinGas(self.T).get_energy(n)
+        (Eideal / n.grid.dV).backward()  # functional derivative -> n.data.grad
+        Videal = FieldR(n.grid, data=n.data.grad)
+        V_minus_mu = FieldR(self.V.grid, data=(self.V.data - self.mu.view(-1, 1, 1, 1)))
+        return (self.energy["Int"] - Eideal).item(), -(Videal + V_minus_mu)
 
     def minimize(self) -> Energy:
         # Compute density:

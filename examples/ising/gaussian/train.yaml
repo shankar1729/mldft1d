@@ -21,3 +21,5 @@ train:
   method: Adam
   lr: 1.0E-3
   weight-decay: 1.0E-3
+  foreach: no  # Torch 2.1 bug in Adam
+
