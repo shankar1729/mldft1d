@@ -1,39 +1,46 @@
+from __future__ import annotations
+from typing import Sequence, TypeVar, List, Optional
+import functools
 import sys
 import copy
+
 import torch
-import functools
-import qimpy as qp
 import numpy as np
-from mldft1d import Grid1D
 from mpi4py import MPI
 from h5py import File
-from typing import Sequence, TypeVar, List, Optional
+
+from qimpy import rc, log
+from qimpy.grid import FieldR
+from mldft1d import Grid1D
 
 
 class Data:
     grid1d: Grid1D
     n_perturbations: int
     E: torch.Tensor
-    V_minus_mu: qp.grid.FieldR
-    n: qp.grid.FieldR
+    n: FieldR  #: stored as n_sites x n_batch x grid-dimensions
+    dE_dn: FieldR
     attrs: dict[str, float]
 
     def __init__(self, filename: str) -> None:
         """Load ML-CDFT training data from HDF5 file `filename`."""
         f = File(filename, "r")
-        z = torch.tensor(f["z"], device=qp.rc.device)
-        lbda = torch.tensor(f["lbda"], device=qp.rc.device)
-        mu = float(f.attrs["mu"])
-        V_minus_mu = torch.outer(lbda, torch.tensor(f["V"], device=qp.rc.device)) - mu
-        n = torch.tensor(np.array(f["n"]), device=qp.rc.device)
-        self.n_perturbations = len(lbda)
-        self.E = torch.tensor(f["E"], device=qp.rc.device)
+        z = torch.tensor(f["z"], device=rc.device)
+        self.E = torch.tensor(f["E"], device=rc.device)
+        self.n_perturbations = len(self.E)
+        n = torch.tensor(np.array(f["n"]), device=rc.device).swapaxes(0, 1)
+        dE_dn = torch.tensor(np.array(f["dE_dn"]), device=rc.device).swapaxes(0, 1)
 
         # Read scalar attributes:
         self.attrs = dict()
         for key in f.attrs:
-            if key not in {"n_bulk", "mu"}:  # n_bulk and mu captured in V - mu
-                self.attrs[key] = float(f.attrs[key])
+            value = f.attrs[key]
+            if hasattr(value, "__len__"):
+                # Flatten-out vector attributes in data files into scalar ones:
+                for index, value_i in enumerate(value):
+                    self.attrs[f"{key}_{index}"] = float(value_i)
+            else:
+                self.attrs[key] = float(value)
 
         # Create grid:
         dz = (z[1] - z[0]).item()
@@ -41,20 +48,9 @@ class Data:
         self.grid1d = get_grid1d(L, dz)
         assert len(z) == self.grid1d.z.shape[2]
 
-        # Remove known part of energy and potential:
-        if "V0" in f:
-            assert "E0" in f
-            V0 = torch.tensor(f["V0"], device=qp.rc.device)
-            E0 = torch.tensor(f["E0"], device=qp.rc.device)
-            self.E += (V0 * n).sum(dim=1) * dz - E0
-            V_minus_mu += V0
-
-        # Create fieldR's for n and V:
-        self.E = self.E.detach()
-        self.V_minus_mu = qp.grid.FieldR(
-            self.grid1d.grid, data=V_minus_mu.detach()[:, None, None, :]
-        )
-        self.n = qp.grid.FieldR(self.grid1d.grid, data=n[:, None, None, :])
+        # Create fieldR's for n and dE_dn:
+        self.n = FieldR(self.grid1d.grid, data=n[..., None, None, :])
+        self.dE_dn = FieldR(self.grid1d.grid, data=dE_dn[..., None, None, :])
 
     def __repr__(self) -> str:
         attrs = self.attrs
@@ -85,12 +81,12 @@ def fuse_data(data_arr: Sequence[Data]) -> List[Data]:
         combined = copy.copy(same_grid[0])
         combined.n_perturbations = sum(data.n_perturbations for data in same_grid)
         combined.E = torch.cat([data.E for data in same_grid])
-        combined.V_minus_mu = qp.grid.FieldR(
-            ref_grid1d.grid,
-            data=torch.cat([data.V_minus_mu.data for data in same_grid], dim=0),
+        combined.n = FieldR(
+            ref_grid1d.grid, data=torch.cat([data.n.data for data in same_grid], dim=1)
         )
-        combined.n = qp.grid.FieldR(
-            ref_grid1d.grid, data=torch.cat([data.n.data for data in same_grid], dim=0)
+        combined.dE_dn = FieldR(
+            ref_grid1d.grid,
+            data=torch.cat([data.dE_dn.data for data in same_grid], dim=1),
         )
         result.append(combined)
     return result
@@ -132,7 +128,7 @@ def random_mpi_split(data: Sequence[T], comm: MPI.Comm, seed: int = 0) -> Sequen
 @functools.lru_cache()
 def get_grid1d(L: float, dz: float) -> Grid1D:
     """Get/make a 1D grid of length `L` and spacing `dz` (cached by L, dz)."""
-    qp.log.info(f"\n----- Making 1D grid for {L = :.2f} and {dz = :.3f} -----")
+    log.info(f"\n----- Making 1D grid for {L = :.2f} and {dz = :.3f} -----")
     return Grid1D(L=L, dz=dz, parallel=False)  # use data-parallel instead
 
 

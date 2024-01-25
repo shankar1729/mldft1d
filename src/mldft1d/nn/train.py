@@ -57,6 +57,7 @@ class Trainer(torch.nn.Module):  # type: ignore
                 f" of {n_perturbations_tot} perturbations):"
             )
             for data in data_set:
+                assert functional.layers[0].n_inputs == data.n.data.shape[0]
                 qp.log.info(f"  {data}")
             return n_perturbations_tot
 
@@ -71,8 +72,9 @@ class Trainer(torch.nn.Module):  # type: ignore
         # Compute energy and gradient errors:
         data.n.data.requires_grad = True
         data.n.data.grad = None
-        Eerr = self.functional.get_energy(data.n) + (data.V_minus_mu ^ data.n) - data.E
-        Verr = torch.autograd.grad(Eerr.sum(), data.n.data, create_graph=True)[0]
+        Eerr = self.functional.get_energy(data.n) - data.E
+        V = torch.autograd.grad(Eerr.sum(), data.n.data, create_graph=True)[0]
+        Verr = V - data.dE_dn.data * data.grid1d.dz  # error in partial derivative dE/dn
         return Eerr.square().sum(), Verr.square().sum()  # converted to MSE loss below
 
     def train_loop(

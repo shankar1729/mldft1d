@@ -1,8 +1,9 @@
 functional:
   load-file: params.dat
+  n-sites: 2
   layers:
   - n-weights: [3, 2]
-    n-outputs: 1
+    n-outputs: 2
     hidden-sizes: [30, 30]
     weight-functions: {type: cspline, r-max: 2.0, n-basis: 10}
 

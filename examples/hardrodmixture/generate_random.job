@@ -4,3 +4,4 @@
 module load openmpi-gpu venv/qimpy
 
 mpirun python generate_random.py
+

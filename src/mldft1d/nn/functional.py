@@ -19,6 +19,7 @@ class Functional(torch.nn.Module):  # type: ignore
         self,
         comm: MPI.Comm,
         *,
+        n_sites: int = 1,
         layers: list[dict],
         attr_names: Sequence[str] = tuple(),
         attrs: Optional[Sequence[float]] = None,
@@ -36,7 +37,7 @@ class Functional(torch.nn.Module):  # type: ignore
 
         # Setup layers:
         self.layers = torch.nn.ModuleList()
-        n_outputs_prev = 1
+        n_outputs_prev = n_sites
         for layer_params in layers:
             merge_and_check_dicts(
                 layer_params, dict(n_inputs=n_outputs_prev, n_attrs=len(self.attrs))
@@ -44,7 +45,7 @@ class Functional(torch.nn.Module):  # type: ignore
             layer = Layer(**layer_params)
             self.layers.append(layer)
             n_outputs_prev = layer.f.n_out
-        assert n_outputs_prev == 1
+        assert n_outputs_prev == n_sites
 
         if comm.size > 1:
             self.bcast_parameters(comm)
@@ -103,16 +104,17 @@ class Functional(torch.nn.Module):  # type: ignore
             torch.save(params, filename)
 
     def get_energy(self, n: qp.grid.FieldR) -> torch.Tensor:
-        channels = n[None]
+        channels = n
         for layer in self.layers:
             channels = layer.compute(channels, self.attrs)
-        return n ^ channels[0]
+        return (n ^ channels).sum(dim=0)
 
     def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
-        channels = n[None]
+        n_batched = n if (len(n.shape) == 1) else n.swapaxes(0, 1)
+        channels = n_batched
         for layer in self.layers:
             channels = layer.compute_bulk(channels, self.attrs)
-        return n * channels[0]
+        return (n_batched * channels).sum(dim=0)
 
     def bcast_parameters(self, comm: MPI.Comm) -> None:
         """Broadcast i.e. synchronize module parameters over `comm`."""
