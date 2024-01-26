@@ -1,9 +1,9 @@
 L: 10.0
 dz: 0.1
-n_bulk: 0.5
+n_bulk: 0.6
 periodic: True
 
-lbda: 3.0
+lbda: 1.0
 Vshape:
   shape: random
   seed: 1
