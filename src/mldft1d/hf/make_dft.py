@@ -26,4 +26,5 @@ def ml(
         exchange_functional=nn.Functional.load(rc.comm, load_file=load_file),
         n_bulk=n_bulk,
         T=T,
+        **kwargs,
     )

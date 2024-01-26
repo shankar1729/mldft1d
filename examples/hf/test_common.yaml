@@ -1,0 +1,13 @@
+a: 1.0
+
+functionals:
+  LDA:
+    hf-lda:
+      T: 0.01  # for include mechanism, need non-null dictionary
+  exact:
+    hf_exact:
+      T: 0.01
+  ML-gaussian-1layer:
+    hf_ml:
+      T: 0.01
+      load_file: gaussian/1layer/params.dat

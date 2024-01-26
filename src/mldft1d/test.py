@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Callable, Sequence, Union
+from typing import Callable, Sequence, Union, Optional
 import sys
 import os
 
@@ -139,43 +139,40 @@ def run(
         plt.savefig(f"{run_name}_EOS.pdf", bbox_inches="tight")
 
         # Visualize weight functions:
-        plot_weights = any(
-            (
-                isinstance(dft, Minimizer)
-                and isinstance(dft.functionals[-1], nn.Functional)
-            )
-            for dft in dfts.values()
-        )
-        if plot_weights:
-            for dft_name, dft in dfts.items():
-                if isinstance(dft, Minimizer):
-                    if isinstance((functional := dft.functionals[-1]), nn.Functional):
-                        for i_layer, layer in enumerate(functional.layers):
-                            plt.figure()
-                            w_tilde = layer.get_w_tilde(grid1d.grid, n_dim_tot=3)
-                            w = torch.fft.irfft(w_tilde).real / dz
-                            for label, style, w_set, n_nonlocal in zip(
-                                ("Even", "Odd"),
-                                ("r", "b"),
-                                w.detach().to(rc.cpu).split(layer.n_weights, dim=1),
-                                layer.n_nonlocal,
-                            ):
-                                w_np = w_set[:, :n_nonlocal].flatten(0, 1).numpy()
-                                label = f"{label} weights"
-                                for i_w, w_i in enumerate(w_np):
-                                    plt.plot(
-                                        z1d, w_i, style, label=("" if i_w else label)
-                                    )
-                            plt.xlim(0, 0.5 * L)
-                            plt.xlabel("$z$")
-                            plt.ylabel("$w(z)$")
-                            plt.legend()
-                            plt.title(
-                                f"Weight functions in layer {i_layer} for {dft_name}"
-                            )
+        def get_nn_functional(dft: protocols.DFT) -> Optional[nn.Functional]:
+            if isinstance(dft, Minimizer):
+                if isinstance(nn_functional := dft.functionals[-1], nn.Functional):
+                    return nn_functional
+            if isinstance(dft, hf.DFT):
+                if isinstance(nn_functional := dft.exchange_functional, nn.Functional):
+                    return nn_functional
+            return None
 
-        plot_bandstructures = any(isinstance(dft, hf.DFT) for dft in dfts.values())
-        if plot_bandstructures:
+        if any(get_nn_functional(dft) for dft in dfts.values()):
+            for dft_name, dft in dfts.items():
+                if (functional := get_nn_functional(dft)) is not None:
+                    for i_layer, layer in enumerate(functional.layers):
+                        plt.figure()
+                        w_tilde = layer.get_w_tilde(grid1d.grid, n_dim_tot=3)
+                        w = torch.fft.irfft(w_tilde).real / dz
+                        for label, style, w_set, n_nonlocal in zip(
+                            ("Even", "Odd"),
+                            ("r", "b"),
+                            w.detach().to(rc.cpu).split(layer.n_weights, dim=1),
+                            layer.n_nonlocal,
+                        ):
+                            w_np = w_set[:, :n_nonlocal].flatten(0, 1).numpy()
+                            label = f"{label} weights"
+                            for i_w, w_i in enumerate(w_np):
+                                plt.plot(z1d, w_i, style, label=("" if i_w else label))
+                        plt.xlim(0, 0.5 * L)
+                        plt.xlabel("$z$")
+                        plt.ylabel("$w(z)$")
+                        plt.legend()
+                        plt.title(f"Weight functions in layer {i_layer} for {dft_name}")
+
+        # Plot band structures:
+        if any(isinstance(dft, hf.DFT) for dft in dfts.values()):
             plt.figure()
             styles = ["b-", "r:", "k--", "g:", "m--", "c"]
             names = []
@@ -199,7 +196,7 @@ def run(
                 names,
             )
             plt.axhline(0, color="k", linestyle="dotted")
-            plt.savefig(f"{run_name}-eigs.pdf", bbox_inches="tight")
+            plt.savefig(f"{run_name}_eigs.pdf", bbox_inches="tight")
 
         rc.report_end()
         StopWatch.print_stats()
