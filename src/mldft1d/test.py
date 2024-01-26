@@ -120,7 +120,10 @@ def run(
                 f_bulks = ThomasFermi(dft.T).get_energy_bulk(n_bulks)
             elif isinstance(dft, hf.DFT):
                 f_bulks = ThomasFermi(dft.T).get_energy_bulk(n_bulks)
-                f_bulks += dft.bulk_exchange.get_energy_bulk(n_bulks)
+                if dft.exchange_functional is None:
+                    f_bulks += dft.bulk_exchange.get_energy_bulk(n_bulks)
+                else:
+                    f_bulks += dft.exchange_functional.get_energy_bulk(n_bulks)
             elif isinstance(dft, ising.Exact):
                 f_bulks = ising.BulkExcess(dft.T, dft.J).get_energy_bulk(n_bulks)
             else:
@@ -174,7 +177,7 @@ def run(
         plot_bandstructures = any(isinstance(dft, hf.DFT) for dft in dfts.values())
         if plot_bandstructures:
             plt.figure()
-            styles = ["b-", "r:"]
+            styles = ["b-", "r:", "k--", "g:", "m--", "c"]
             names = []
             for (dft_name, dft), style in zip(dfts.items(), styles):
                 names.append(dft_name)
@@ -185,17 +188,17 @@ def run(
                         eig = np.repeat(eig, 2, axis=0)
                     mu = dft.mu.item()
                     n_plot = np.max(np.where(eig < mu), axis=1)[1] + 4
-                    plt.plot(k[:, ...], eig[:, :n_plot] - mu, style, label=dft_name)
+                    plt.plot(k, eig[:, :n_plot] - mu, style, label=dft_name)
             plt.xlabel("$k$")
             plt.ylabel(r"$\epsilon_{nk}-\mu$")
             plt.legend(
                 [
-                    Line2D([0], [0], color=styles[0][0], linestyle=styles[0][1]),
-                    Line2D([0], [0], color=styles[1][0], linestyle=styles[1][1]),
+                    Line2D([0], [0], color=style[0], linestyle=style[1:])
+                    for style in styles
                 ],
                 names,
             )
-            plt.axhline(0, color="k", linestyle="--")
+            plt.axhline(0, color="k", linestyle="dotted")
             plt.savefig(f"{run_name}-eigs.pdf", bbox_inches="tight")
 
         rc.report_end()
