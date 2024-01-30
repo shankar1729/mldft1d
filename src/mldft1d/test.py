@@ -119,11 +119,10 @@ def run(
             elif isinstance(dft, Schrodinger):
                 f_bulks = ThomasFermi(dft.T).get_energy_bulk(n_bulks)
             elif isinstance(dft, hf.DFT):
-                f_bulks = ThomasFermi(dft.T).get_energy_bulk(n_bulks)
                 if dft.exchange_functional is None:
-                    f_bulks += dft.bulk_exchange.get_energy_bulk(n_bulks)
+                    f_bulks = dft.bulk_exchange.get_energy_bulk(n_bulks)
                 else:
-                    f_bulks += dft.exchange_functional.get_energy_bulk(n_bulks)
+                    f_bulks = dft.exchange_functional.get_energy_bulk(n_bulks)
             elif isinstance(dft, ising.Exact):
                 f_bulks = ising.BulkExcess(dft.T, dft.J).get_energy_bulk(n_bulks)
             else:
