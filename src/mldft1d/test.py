@@ -197,6 +197,16 @@ def run(
             plt.axhline(0, color="k", linestyle="dotted")
             plt.savefig(f"{run_name}_eigs.pdf", bbox_inches="tight")
 
+        # Plot target potentials:
+        plt.figure()
+        for dft_name, dft in dfts.items():
+            _, Vtarget = dft.training_targets()
+            plt.plot(z1d, get1D(Vtarget.data[0]), label=dft_name)
+        plt.xlabel("z")
+        plt.ylabel("$V_{target}$")
+        plt.legend()
+        plt.savefig(f"{run_name}_Vtarget.pdf", bbox_inches="tight")
+
         rc.report_end()
         StopWatch.print_stats()
         plt.show()

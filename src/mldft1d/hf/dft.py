@@ -256,12 +256,25 @@ class DFT:
         return self.energy
 
     def training_targets(self) -> tuple[float, FieldR]:
-        assert self.exchange_functional is None  # only makes sense for exact
-        Exx = float(self.energy["Ex"])
-        V_minus_mu = FieldR(self.V.grid, data=(self.V.data - self.mu.view(-1, 1, 1, 1)))
-        VH = self.n.convolve(self.coulomb_tilde)
-        Vxx = self.oep.Vks - VH - V_minus_mu
-        return Exx, Vxx
+        if self.exchange_functional is None:
+            # Exact (OEP) case:
+            Exx = float(self.energy["Ex"])
+            V_minus_mu = FieldR(
+                self.V.grid, data=(self.V.data - self.mu.view(-1, 1, 1, 1))
+            )
+            VH = self.n.convolve(self.coulomb_tilde)
+            Vxx = self.oep.Vks - VH - V_minus_mu
+            return Exx, Vxx
+        else:
+            # LDA / ML case:
+            n = self.n.clone()
+            n.data.requires_grad = True
+            n.data.grad = None
+            Ex = self.exchange_functional.get_energy(n)
+            Ex.backward()
+            assert n.data.grad is not None
+            Vx = FieldR(n.grid, data=n.data.grad / n.grid.dV)
+            return Ex.item(), Vx
 
 
 class SCF(Pulay[FieldH]):
