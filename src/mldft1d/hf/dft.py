@@ -259,13 +259,10 @@ class DFT:
         if self.exchange_functional is None:
             # Exact (OEP) case:
             Exx = float(self.energy["Ex"])
-            V_minus_mu = FieldR(
-                self.V.grid, data=(self.V.data - self.mu.view(-1, 1, 1, 1))
-            )
             VH = self.n.convolve(self.coulomb_tilde)
-            Vxx = self.oep.Vks - VH - V_minus_mu
+            Vxx = self.oep.Vks - VH - self.V  # up to an additive constant
 
-            # HACK for G=0 component
+            # Finite difference approach for G=0 component
             log.info("\nFinite difference of OEP to compute Vxx(G=0)")
             DELTA_N = 0.01
             self.n_electrons += DELTA_N
