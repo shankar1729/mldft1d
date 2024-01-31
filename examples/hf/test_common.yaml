@@ -7,6 +7,10 @@ functionals:
   exact:
     hf_exact:
       T: 0.01
+  ML-nn:
+    hf_ml:
+      T: 0.01
+      load_file: nn/params.dat
   ML-gaussian-1layer:
     hf_ml:
       T: 0.01

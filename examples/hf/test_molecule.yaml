@@ -1,12 +1,12 @@
-L: 20.0
+L: 40.0
 dz: 0.1
-n_bulk: 0.1
+n_bulk: 0.05
 periodic: False
 
 lbda: -1.0
 Vshape:
   shape: coulomb1d
-  ionpos: [8, 12]
+  ionpos: [18, 22]
   Zs: [1, 1]
   fractional: False
 
