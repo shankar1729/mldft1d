@@ -55,6 +55,8 @@ def run(
     for Vshape_i in Vshape:
         if Vshape_i["shape"] == "coulomb1d":
             Vshape_i["a"] = dft_common_args["a"]
+            Vshape_i["Zs"] = dft_common_args["Zs"]
+            Vshape_i["ionpos"] = dft_common_args["ionpos"]
             Vshape_i["periodic"] = dft_common_args["periodic"]
     Vdata = lbda * torch.stack(
         [

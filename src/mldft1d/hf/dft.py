@@ -31,8 +31,6 @@ class DFT:
     mu: torch.Tensor  #: Bulk chemical potential
     T: float  #: Fermi smearing width
     periodic: bool  #: Whether the system is periodic (crystal) or isolated (molecule)
-    ionpos: Optional[list]
-    Zs: Optional[list]
     n: FieldR  #: Equilibrium density
     V: FieldR  #: External potential
     scf: SCF  #: Self-consistent field algorithm (for LDA/ML cases only)
@@ -70,8 +68,6 @@ class DFT:
         self.n_electrons = n_bulk.item() * grid1d.L
         self.T = T
         self.periodic = periodic
-        self.ionpos = ionpos
-        self.Zs = Zs
         self.n = FieldR(grid1d.grid, data=n_bulk.repeat((1,) + grid1d.z.shape))
         self.V = self.n.zeros_like()
         self.energy = Energy()
@@ -97,6 +93,24 @@ class DFT:
         log.info(f"n_bulk: {self.n_bulk}")
         log.info(f"a: {a}")
 
+        # Ewald energy:
+        if ionpos is not None:
+            assert Zs is not None
+            assert len(ionpos) == len(Zs)
+            Z = torch.tensor(Zs, device=rc.device, dtype=torch.float64)
+            pos = torch.tensor(ionpos, device=rc.device, dtype=torch.float64)
+            if self.periodic:
+                Gmag = self.grid1d.Gmag.flatten()
+                Sf = torch.exp(1j * torch.outer(Gmag, pos)) @ Z.to(torch.complex128)
+                PhiG = self.soft_coulomb.periodic_kernel(Gmag)
+                Ewald = (abs_squared(Sf) @ PhiG) * 0.5 / self.grid1d.L
+            else:
+                delta_r = pos[:, None] - pos[None, :]
+                Ewald = 0.5 * Z @ self.soft_coulomb(delta_r) @ Z
+            # Remove self-interaction from above calculation:
+            Ewald -= 0.5 * Z.square().sum() / a  # Remove self-interaction in Ewald sum
+            self.energy["Ewald"] = Ewald
+
         # Setup k-points:
         if self.periodic:
             Nk = 2 * int(np.ceil(0.5 * Lsup / self.grid1d.L))
@@ -104,18 +118,6 @@ class DFT:
             self.k = torch.arange(0.5 * dk, 0.5, dk, device=rc.device)  # off-Gamma
             self.wk = 4 * dk  # weight of each k-point (2 for symm, 2 for spin)
             log.info(f"Reduced {Nk} k-points to {Nk // 2} using inversion symmetry")
-            if self.ionpos is not None:
-                assert len(self.ionpos) == len(self.Zs)
-                Gmag = self.grid1d.Gmag
-                Sf = (
-                    self.Zs[None, :]
-                    * torch.exp(1j * Gmag[:, None] * self.ionpos[None, :])
-                ).sum(dim=-1)
-                PhiG = self.soft_coulomb.periodic_kernel(Gmag.flatten())
-                Ewald = 1.0 / self.grid1d.L * (torch.abs(Sf.conj() * Sf) * PhiG).sum()
-                for _Z in Zs:
-                    Ewald -= _Z**2 / a  # Remove self-interaction in Ewald sum
-                self.energy["Ewald"] = Ewald
         else:
             Nk = 1
             dk = 1.0
