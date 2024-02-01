@@ -101,9 +101,10 @@ class DFT:
             pos = torch.tensor(ionpos, device=rc.device, dtype=torch.float64)
             if self.periodic:
                 Gmag = self.grid1d.Gmag.flatten()
+                wG = self.grid1d.grid.weight2H  # recirpocal space integration weight
                 Sf = torch.exp(1j * torch.outer(Gmag, pos)) @ Z.to(torch.complex128)
                 PhiG = self.soft_coulomb.periodic_kernel(Gmag)
-                Ewald = (abs_squared(Sf) @ PhiG) * 0.5 / self.grid1d.L
+                Ewald = (abs_squared(Sf) * PhiG * wG).sum() * 0.5 / self.grid1d.L
             else:
                 delta_r = pos[:, None] - pos[None, :]
                 Ewald = 0.5 * Z @ self.soft_coulomb(delta_r) @ Z

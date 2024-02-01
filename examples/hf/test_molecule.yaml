@@ -6,8 +6,7 @@ periodic: False
 lbda: -1.0
 Vshape:
   shape: coulomb1d
-  ionpos: [18, 22]
-  Zs: [1, 1]
-  fractional: False
+ionpos: [18, 22]
+Zs: [1, 1]
 
 include: test_common.yaml
