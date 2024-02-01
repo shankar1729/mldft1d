@@ -14,22 +14,36 @@ def plot_data(data_file: str) -> None:
         E = np.array(f["E"])
         dE_dn = np.array(f["dE_dn"])
 
-    # Plot site density profiles and potentials:
     n_sites = n.shape[1]
     n_perts = len(E)
+    normalize = colors.Normalize(vmin=0, vmax=max(n_perts - 1, 1))
+    cmap = cm.get_cmap("RdBu")
+
     for i_site in range(n_sites):
+        # Plot densities
         plt.figure()
-        # --- initialize colormap to color by V0
-        normalize = colors.Normalize(vmin=0, vmax=(n_perts - 1))
-        cmap = cm.get_cmap("RdBu")
-        # --- plot densities
         for i_pert, n_cur in enumerate(n):
             plt.plot(z, n_cur[i_site], color=cmap(normalize(i_pert)), lw=1)
-        # --- plot potential for comparison
+        # Plot external potential shape for comparison
         plt.plot(z, V[i_site], color="k", lw=1, ls="dashed")
         plt.xlabel(r"$z$")
         plt.ylabel(r"$n(z)$")
-        plt.title(f"Site {i_site}")
+        plt.title(f"Site {i_site} density")
+        plt.xlim(z.min(), z.max())
+        # Add colorbar
+        sm = cm.ScalarMappable(cmap=cmap, norm=normalize)
+        sm.set_array([])
+        plt.colorbar(sm, label=r"Calculation index", ax=plt.gca())
+
+        # Plot potentials
+        plt.figure()
+        for i_pert, dE_dn_cur in enumerate(dE_dn):
+            plt.plot(z, dE_dn_cur[i_site], color=cmap(normalize(i_pert)), lw=1)
+        # --- plot external potential shape for comparison
+        plt.plot(z, V[i_site], color="k", lw=1, ls="dashed")
+        plt.xlabel(r"$z$")
+        plt.ylabel(r"$\delta E/\delta n(z)$")
+        plt.title(f"Site {i_site} potential")
         plt.xlim(z.min(), z.max())
         # --- add colorbar
         sm = cm.ScalarMappable(cmap=cmap, norm=normalize)
