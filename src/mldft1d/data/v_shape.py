@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 import torch
 import numpy as np
@@ -55,22 +55,15 @@ def _get_random(grid1d: Grid1D, *, sigma: float, seed: int) -> torch.Tensor:
 def _get_coulomb1d(
     grid1d: Grid1D,
     *,
+    ionpos: list,
+    Zs: list,
     a: float = 1.0,
     periodic: bool = True,
-    fractional: bool = True,
-    ionpos: Optional[list] = None,
-    Zs: Optional[list] = None,
 ) -> torch.Tensor:
     L = grid1d.L
     Nz = grid1d.grid.shape[2]
     dz = grid1d.dz
-    if ionpos is None or len(ionpos) == 0:
-        ionpos = [0.5] if fractional else [0.5 * L]  # default one atom centered
-    if Zs is None or len(Zs) == 0:
-        Zs = [1.0]  # default atomic charge
-    assert len(Zs) == 1 or len(Zs) == len(ionpos)
-    if len(Zs) == 1:
-        Zs = [Zs[0] for _ion in ionpos]
+    assert len(Zs) == len(ionpos)
     soft_coulomb = mldft1d.hf.SoftCoulomb(a)
     V1 = (
         soft_coulomb.periodic_kernel(grid1d.Gmag)
@@ -79,7 +72,7 @@ def _get_coulomb1d(
     )
     V = torch.zeros(V1.shape, dtype=torch.complex128, device=V1.device)
     for _ionx, _Z in zip(ionpos, Zs):
-        trans = _ionx if fractional else _ionx / L
+        trans = _ionx / L
         translation_phase = ((2j * np.pi) * grid1d.iGz * -trans).exp()
         V += V1 * _Z * translation_phase / L
     return V

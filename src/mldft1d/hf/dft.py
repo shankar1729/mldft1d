@@ -31,6 +31,8 @@ class DFT:
     mu: torch.Tensor  #: Bulk chemical potential
     T: float  #: Fermi smearing width
     periodic: bool  #: Whether the system is periodic (crystal) or isolated (molecule)
+    ionpos: Optional[list]
+    Zs: Optional[list]
     n: FieldR  #: Equilibrium density
     V: FieldR  #: External potential
     scf: SCF  #: Self-consistent field algorithm (for LDA/ML cases only)
@@ -56,6 +58,8 @@ class DFT:
         a: float = 1.0,
         Lsup: float = 200.0,
         periodic: bool = True,
+        ionpos: Optional[list] = None,
+        Zs: Optional[list] = None,
     ) -> None:
         comm = grid1d.grid.comm
         assert (comm is None) or (comm.size == 1)  # No MPI support here for simplicity
@@ -66,6 +70,8 @@ class DFT:
         self.n_electrons = n_bulk.item() * grid1d.L
         self.T = T
         self.periodic = periodic
+        self.ionpos = ionpos
+        self.Zs = Zs
         self.n = FieldR(grid1d.grid, data=n_bulk.repeat((1,) + grid1d.z.shape))
         self.V = self.n.zeros_like()
         self.energy = Energy()
@@ -98,6 +104,18 @@ class DFT:
             self.k = torch.arange(0.5 * dk, 0.5, dk, device=rc.device)  # off-Gamma
             self.wk = 4 * dk  # weight of each k-point (2 for symm, 2 for spin)
             log.info(f"Reduced {Nk} k-points to {Nk // 2} using inversion symmetry")
+            if self.ionpos is not None:
+                assert len(self.ionpos) == len(self.Zs)
+                Gmag = self.grid1d.Gmag
+                Sf = (
+                    self.Zs[None, :]
+                    * torch.exp(1j * Gmag[:, None] * self.ionpos[None, :])
+                ).sum(dim=-1)
+                PhiG = self.soft_coulomb.periodic_kernel(Gmag.flatten())
+                Ewald = 1.0 / self.grid1d.L * (torch.abs(Sf.conj() * Sf) * PhiG).sum()
+                for _Z in Zs:
+                    Ewald -= _Z**2 / a  # Remove self-interaction in Ewald sum
+                self.energy["Ewald"] = Ewald
         else:
             Nk = 1
             dk = 1.0

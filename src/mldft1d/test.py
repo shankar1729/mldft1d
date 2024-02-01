@@ -209,6 +209,7 @@ def run(
 
         rc.report_end()
         StopWatch.print_stats()
+        plt.close()
         plt.show()
 
 
