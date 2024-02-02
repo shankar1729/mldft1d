@@ -52,12 +52,6 @@ def run(
 
     # Create grid and external potential:
     grid1d = Grid1D(L=L, dz=dz)
-    for Vshape_i in Vshape:
-        if Vshape_i["shape"] == "coulomb1d":
-            Vshape_i["a"] = dft_common_args["a"]
-            Vshape_i["Zs"] = dft_common_args["Zs"]
-            Vshape_i["ionpos"] = dft_common_args["ionpos"]
-            Vshape_i["periodic"] = dft_common_args["periodic"]
     Vdata = lbda * torch.stack(
         [
             v_shape.get(grid1d, **io.dict.key_cleanup(Vshape_i)).data
@@ -97,7 +91,11 @@ def run(
             plt.figure(figsize=(10, 6))
             z1d = get1D(grid1d.z)
             plt.plot(z1d, get1D(V.data[i_site]), label="$V$")
+            plotted = 0
             for dft_name, dft in dfts.items():
+                if isinstance(dft, hf.DFT) and plotted == 0:
+                    plt.plot(z1d, get1D(dft.Vnuc.data), label="$V_{nuc}$")
+                    plotted = 1
                 plt.plot(z1d, get1D(dft.n.data[i_site]), label=f"$n$ ({dft_name})")
             plt.axhline(n_bulks[i_site].item(), color="k", ls="dotted")
             plt.axhline(0.0, color="k", ls="dotted")
