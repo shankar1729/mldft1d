@@ -33,6 +33,7 @@ class DFT:
     periodic: bool  #: Whether the system is periodic (crystal) or isolated (molecule)
     n: FieldR  #: Equilibrium density
     V: FieldR  #: External potential
+    Vnuc: FieldR  #: Nuclear potential
     scf: SCF  #: Self-consistent field algorithm (for LDA/ML cases only)
     oep: OEP
 
@@ -70,6 +71,7 @@ class DFT:
         self.periodic = periodic
         self.n = FieldR(grid1d.grid, data=n_bulk.repeat((1,) + grid1d.z.shape))
         self.V = self.n.zeros_like()
+        self.Vnuc = self.n.zeros_like()
         self.energy = Energy()
         if isinstance(exchange_functional, str):
             assert exchange_functional in {"lda", "exact"}
@@ -92,25 +94,6 @@ class DFT:
         log.info(f"T: {self.T}")
         log.info(f"n_bulk: {self.n_bulk}")
         log.info(f"a: {a}")
-
-        # Ewald energy:
-        if ionpos is not None:
-            assert Zs is not None
-            assert len(ionpos) == len(Zs)
-            Z = torch.tensor(Zs, device=rc.device, dtype=torch.float64)
-            pos = torch.tensor(ionpos, device=rc.device, dtype=torch.float64)
-            if self.periodic:
-                Gmag = self.grid1d.Gmag.flatten()
-                wG = self.grid1d.grid.weight2H  # recirpocal space integration weight
-                Sf = torch.exp(1j * torch.outer(Gmag, pos)) @ Z.to(torch.complex128)
-                PhiG = self.soft_coulomb.periodic_kernel(Gmag)
-                Ewald = (abs_squared(Sf) * PhiG * wG).sum() * 0.5 / self.grid1d.L
-            else:
-                delta_r = pos[:, None] - pos[None, :]
-                Ewald = 0.5 * Z @ self.soft_coulomb(delta_r) @ Z
-            # Remove self-interaction from above calculation:
-            Ewald -= 0.5 * Z.square().sum() / a  # Remove self-interaction in Ewald sum
-            self.energy["Ewald"] = Ewald
 
         # Setup k-points:
         if self.periodic:
@@ -154,6 +137,35 @@ class DFT:
             self.Kx_tilde[iq] = Kx_cur
             self.Kx_tilde[iq - Nk] = torch.roll(Kx_cur, 1)
 
+        # Compute nuclear potential and Ewald energy:
+        if ionpos is not None:
+            assert Zs is not None
+            assert len(ionpos) == len(Zs)
+            Z = torch.tensor(Zs, device=rc.device, dtype=torch.float64)
+            pos = torch.tensor(ionpos, device=rc.device, dtype=torch.float64)
+            soft_coulomb = self.soft_coulomb
+            if self.periodic:
+                V1 = soft_coulomb.periodic_kernel(grid1d.Gmag)
+                Gmag = self.grid1d.Gmag.flatten()
+                wG = self.grid1d.grid.weight2H  # recirpocal space integration weight
+                Sf = torch.exp(1j * torch.outer(Gmag, pos)) @ Z.to(torch.complex128)
+                PhiG = soft_coulomb.periodic_kernel(Gmag)
+                Eewald = (abs_squared(Sf) * PhiG * wG).sum() * 0.5 / self.grid1d.L
+            else:
+                V1 = soft_coulomb.truncated_kernel(Nz, dz, real=True)[None, None, :]
+                delta_r = pos[:, None] - pos[None, :]
+                Eewald = 0.5 * Z @ soft_coulomb(delta_r) @ Z
+            # Remove self-interaction from above calculation:
+            Eewald -= 0.5 * Z.square().sum() / a  # Remove self-interaction in Ewald sum
+            self.energy["Eewald"] = Eewald
+            Vnuc = torch.zeros(V1.shape, device=rc.device, dtype=torch.complex128)
+            #  Construct nuclear potential
+            for _ionx, _Z in zip(ionpos, Zs):
+                trans = _ionx / self.grid1d.L
+                translation_phase = ((2j * np.pi) * grid1d.iGz * -trans).exp()
+                Vnuc -= V1 * _Z * translation_phase / self.grid1d.L  # Vnuc attractive
+            self.Vnuc = ~FieldH(grid1d.grid, data=Vnuc)
+
     def to_real_space(self, C: torch.Tensor) -> torch.Tensor:
         Nk, Nbands, NG = C.shape
         Nz = self.grid1d.grid.shape[2]
@@ -178,6 +190,7 @@ class DFT:
         rho_tot = FieldR(n.grid, data=n.data.sum(dim=-4))  # charge density
         energy["EH"] = 0.5 * (rho_tot ^ rho_tot.convolve(self.coulomb_tilde))
         energy["Eext"] = (n ^ self.V).sum(dim=-1)
+        energy["Eloc"] = (n ^ self.Vnuc).sum(dim=-1)
         if self.exchange_functional is not None:
             energy["Ex"] = self.exchange_functional.get_energy(n)
 

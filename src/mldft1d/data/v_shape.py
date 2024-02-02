@@ -6,7 +6,7 @@ import numpy as np
 
 from qimpy.grid import FieldH, FieldR
 from qimpy.math import abs_squared
-import mldft1d
+
 from .. import Grid1D
 
 
@@ -52,30 +52,9 @@ def _get_random(grid1d: Grid1D, *, sigma: float, seed: int) -> torch.Tensor:
     return Gnoise
 
 
-def _get_coulomb1d(
-    grid1d: Grid1D,
-    *,
-    ionpos: list,
-    Zs: list,
-    a: float = 1.0,
-    periodic: bool = True,
-) -> torch.Tensor:
-    L = grid1d.L
-    Nz = grid1d.grid.shape[2]
-    dz = grid1d.dz
-    assert len(Zs) == len(ionpos)
-    soft_coulomb = mldft1d.hf.SoftCoulomb(a)
-    V1 = (
-        soft_coulomb.periodic_kernel(grid1d.Gmag)
-        if periodic
-        else soft_coulomb.truncated_kernel(Nz, dz, real=True)[None, None, :]
-    )
-    V = torch.zeros(V1.shape, dtype=torch.complex128, device=V1.device)
-    for _ionx, _Z in zip(ionpos, Zs):
-        trans = _ionx / L
-        translation_phase = ((2j * np.pi) * grid1d.iGz * -trans).exp()
-        V += V1 * _Z * translation_phase / L
-    return V
+def _no_potential(grid1d: Grid1D) -> torch.Tensor:
+    print(grid1d.Gmag.shape)
+    return torch.zeros(grid1d.Gmag.shape, dtype=torch.complex128)
 
 
 _get_map: Dict[str, Any] = {
@@ -83,5 +62,5 @@ _get_map: Dict[str, Any] = {
     "cosine": _get_cosine,
     "rectangular": _get_rectangular,
     "random": _get_random,
-    "coulomb1d": _get_coulomb1d,
+    "none": _no_potential,
 }

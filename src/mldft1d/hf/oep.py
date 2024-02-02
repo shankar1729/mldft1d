@@ -50,7 +50,9 @@ class OEP(Minimize[FieldR]):
     def optimize(self):
         if not hasattr(self, "Vks"):
             # Generate initial ansatz:
-            self.Vks = self.dft.V + self.dft.n.convolve(self.dft.coulomb_tilde)
+            self.Vks = (
+                self.dft.V + self.dft.Vnuc + self.dft.n.convolve(self.dft.coulomb_tilde)
+            )
         self.minimize()
         self.dft.n.data = self.dft.n.data.detach()
 
