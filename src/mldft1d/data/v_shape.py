@@ -52,8 +52,7 @@ def _get_random(grid1d: Grid1D, *, sigma: float, seed: int) -> torch.Tensor:
     return Gnoise
 
 
-def _no_potential(grid1d: Grid1D) -> torch.Tensor:
-    print(grid1d.Gmag.shape)
+def _get_none(grid1d: Grid1D) -> torch.Tensor:
     return torch.zeros(grid1d.Gmag.shape, dtype=torch.complex128)
 
 
@@ -62,5 +61,5 @@ _get_map: Dict[str, Any] = {
     "cosine": _get_cosine,
     "rectangular": _get_rectangular,
     "random": _get_random,
-    "none": _no_potential,
+    "none": _get_none,
 }

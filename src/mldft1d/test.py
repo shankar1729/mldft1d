@@ -86,17 +86,19 @@ def run(
         log.info(f"{dft_name:>14s}:  mu: {io.fmt(dft.mu)}  E: {E:>9f}  gap: {gap:>9f}")
 
     if rc.is_head:
+        hf_dfts = {
+            dft_name: dft for dft_name, dft in dfts.items() if isinstance(dft, hf.DFT)
+        }
+        Vnuc = next(iter(hf_dfts.values())).Vnuc if hf_dfts else None
         for i_site in range(n_sites):
             # Plot density and potential:
             plt.figure(figsize=(10, 6))
             z1d = get1D(grid1d.z)
-            plt.plot(z1d, get1D(V.data[i_site]), label="$V$")
-            plotted = 0
             for dft_name, dft in dfts.items():
-                if isinstance(dft, hf.DFT) and plotted == 0:
-                    plt.plot(z1d, get1D(dft.Vnuc.data), label="$V_{nuc}$")
-                    plotted = 1
                 plt.plot(z1d, get1D(dft.n.data[i_site]), label=f"$n$ ({dft_name})")
+            plt.plot(z1d, get1D(V.data[i_site]), ls="dashed", label="$V$")
+            if Vnuc is not None:
+                plt.plot(z1d, get1D(Vnuc.data), ls="dashed", label="$V_{nuc}$")
             plt.axhline(n_bulks[i_site].item(), color="k", ls="dotted")
             plt.axhline(0.0, color="k", ls="dotted")
             plt.xlabel("z")
@@ -171,20 +173,17 @@ def run(
                         plt.title(f"Weight functions in layer {i_layer} for {dft_name}")
 
         # Plot band structures:
-        if any(isinstance(dft, hf.DFT) for dft in dfts.values()):
+        if hf_dfts:
             plt.figure()
             styles = ["b-", "r:", "k--", "g:", "m--", "c"]
-            names = []
-            for (dft_name, dft), style in zip(dfts.items(), styles):
-                names.append(dft_name)
-                if isinstance(dft, hf.DFT):
-                    k = dft.k.numpy() if dft.periodic else np.array([0.0, 1.0])
-                    eig = dft.eig.detach().to(rc.cpu).numpy()
-                    if not dft.periodic:
-                        eig = np.repeat(eig, 2, axis=0)
-                    mu = dft.mu.item()
-                    n_plot = np.max(np.where(eig < mu), axis=1)[1] + 4
-                    plt.plot(k, eig[:, :n_plot] - mu, style, label=dft_name)
+            for (dft_name, dft), style in zip(hf_dfts.items(), styles):
+                k = dft.k.numpy() if dft.periodic else np.array([0.0, 1.0])
+                eig = dft.eig.detach().to(rc.cpu).numpy()
+                if not dft.periodic:
+                    eig = np.repeat(eig, 2, axis=0)
+                mu = dft.mu.item()
+                n_plot = np.max(np.where(eig < mu), axis=1)[1] + 4
+                plt.plot(k, eig[:, :n_plot] - mu, style, label=dft_name)
             plt.xlabel("$k$")
             plt.ylabel(r"$\epsilon_{nk}-\mu$")
             plt.legend(
@@ -192,7 +191,7 @@ def run(
                     Line2D([0], [0], color=style[0], linestyle=style[1:])
                     for style in styles
                 ],
-                names,
+                hf_dfts.keys(),
             )
             plt.axhline(0, color="k", linestyle="dotted")
             plt.savefig(f"{run_name}_eigs.pdf", bbox_inches="tight")
@@ -201,15 +200,14 @@ def run(
         plt.figure()
         for dft_name, dft in dfts.items():
             _, Vtarget = dft.training_targets()
-            plt.plot(z1d, get1D(Vtarget.data[0]), label=dft_name)
+            plt.plot(z1d, get1D(Vtarget.data[0] * dft.n.data[0]), label=dft_name)
         plt.xlabel("z")
-        plt.ylabel("$V_{target}$")
+        plt.ylabel(r"$V_{target} \cdot n$")
         plt.legend()
         plt.savefig(f"{run_name}_Vtarget.pdf", bbox_inches="tight")
 
         rc.report_end()
         StopWatch.print_stats()
-        plt.close()
         plt.show()
 
 

@@ -57,8 +57,7 @@ class DFT:
         a: float = 1.0,
         Lsup: float = 200.0,
         periodic: bool = True,
-        ionpos: Optional[list] = None,
-        Zs: Optional[list] = None,
+        nuclei: Optional[dict] = None,
     ) -> None:
         comm = grid1d.grid.comm
         assert (comm is None) or (comm.size == 1)  # No MPI support here for simplicity
@@ -138,33 +137,29 @@ class DFT:
             self.Kx_tilde[iq - Nk] = torch.roll(Kx_cur, 1)
 
         # Compute nuclear potential and Ewald energy:
-        if ionpos is not None:
-            assert Zs is not None
-            assert len(ionpos) == len(Zs)
-            Z = torch.tensor(Zs, device=rc.device, dtype=torch.float64)
-            pos = torch.tensor(ionpos, device=rc.device, dtype=torch.float64)
-            soft_coulomb = self.soft_coulomb
-            if self.periodic:
-                V1 = soft_coulomb.periodic_kernel(grid1d.Gmag)
-                Gmag = self.grid1d.Gmag.flatten()
-                wG = self.grid1d.grid.weight2H  # recirpocal space integration weight
-                Sf = torch.exp(1j * torch.outer(Gmag, pos)) @ Z.to(torch.complex128)
-                PhiG = soft_coulomb.periodic_kernel(Gmag)
-                Eewald = (abs_squared(Sf) * PhiG * wG).sum() * 0.5 / self.grid1d.L
-            else:
-                V1 = soft_coulomb.truncated_kernel(Nz, dz, real=True)[None, None, :]
-                delta_r = pos[:, None] - pos[None, :]
-                Eewald = 0.5 * Z @ soft_coulomb(delta_r) @ Z
-            # Remove self-interaction from above calculation:
+        if nuclei is not None:
+            Z, rho_nuc_tilde = self.get_nuclear_charge(**nuclei)
+            Vnuc_tilde = rho_nuc_tilde.convolve(self.coulomb_tilde)
+            self.Vnuc = ~Vnuc_tilde
+
+            # Compute Ewald sum:
+            Eewald = 0.5 * (rho_nuc_tilde ^ Vnuc_tilde)
             Eewald -= 0.5 * Z.square().sum() / a  # Remove self-interaction in Ewald sum
             self.energy["Eewald"] = Eewald
-            Vnuc = torch.zeros(V1.shape, device=rc.device, dtype=torch.complex128)
-            #  Construct nuclear potential
-            for _ionx, _Z in zip(ionpos, Zs):
-                trans = _ionx / self.grid1d.L
-                translation_phase = ((2j * np.pi) * grid1d.iGz * -trans).exp()
-                Vnuc -= V1 * _Z * translation_phase / self.grid1d.L  # Vnuc attractive
-            self.Vnuc = ~FieldH(grid1d.grid, data=Vnuc)
+        else:
+            self.Vnuc = FieldR(grid1d.grid)  # zero nuclear contribution
+
+    def get_nuclear_charge(
+        self, *, positions: list[float], charges: list[float]
+    ) -> tuple[torch.Tensor, FieldH]:
+        """Get nuclear charges and density (in reciprocal space)"""
+        Z = torch.tensor(charges, device=rc.device, dtype=torch.float64)
+        pos = torch.tensor(positions, device=rc.device, dtype=torch.float64)
+        assert pos.shape == Z.shape
+        grid1d = self.grid1d
+        translations = torch.exp(1j * torch.einsum("...,a -> ...a", grid1d.Gmag, pos))
+        rho_nuc_tilde = translations @ (-Z / grid1d.L).to(torch.complex128)
+        return Z, FieldH(grid1d.grid, data=rho_nuc_tilde)
 
     def to_real_space(self, C: torch.Tensor) -> torch.Tensor:
         Nk, Nbands, NG = C.shape

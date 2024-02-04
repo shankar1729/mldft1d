@@ -48,13 +48,12 @@ class OEP(Minimize[FieldR]):
         )
 
     def optimize(self):
+        dft = self.dft
         if not hasattr(self, "Vks"):
             # Generate initial ansatz:
-            self.Vks = (
-                self.dft.V + self.dft.Vnuc + self.dft.n.convolve(self.dft.coulomb_tilde)
-            )
+            self.Vks = dft.V + dft.Vnuc + dft.n.convolve(dft.coulomb_tilde)
         self.minimize()
-        self.dft.n.data = self.dft.n.data.detach()
+        dft.n.data = dft.n.data.detach()
 
     def step(self, direction: FieldR, step_size: float) -> None:
         """Move the state along `direction` by amount `step_size`"""
