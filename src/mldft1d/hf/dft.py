@@ -293,16 +293,10 @@ class DFT:
 
             # Finite difference approach for G=0 component
             log.info("\nFinite difference of OEP to compute Vxx(G=0)")
-            DELTA_N = 0.01
-            self.n_electrons += DELTA_N
-            self.oep.optimize()
-            Exx_plus = float(self.energy["Ex"])
-            self.n_electrons -= DELTA_N
-            self.n_electrons -= DELTA_N
-            self.oep.optimize()
-            Exx_minus = float(self.energy["Ex"])
-            self.n_electrons += DELTA_N
-            Vx_G0 = (Exx_plus - Exx_minus) / (2 * DELTA_N)
+            DELTA_N_ELECTRONS = 0.01
+            Exx_plus = float(self.oep.perturb_n_electrons(+DELTA_N_ELECTRONS)["Ex"])
+            Exx_minus = float(self.oep.perturb_n_electrons(-DELTA_N_ELECTRONS)["Ex"])
+            Vx_G0 = (Exx_plus - Exx_minus) / (2 * DELTA_N_ELECTRONS)
             Vx_G0_old = Vxx.integral().item() / self.grid1d.L
             log.info(f"{Vx_G0 = } {Vx_G0_old = }\n")
             Vxx += Vx_G0 - Vx_G0_old

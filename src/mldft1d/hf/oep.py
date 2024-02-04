@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Union
 
-from qimpy import MPI
+from qimpy import MPI, Energy
 from qimpy.io import CheckpointPath
 from qimpy.grid import FieldR
 from qimpy.algorithms import Minimize, MinimizeState
@@ -78,3 +78,24 @@ class OEP(Minimize[FieldR]):
             state.gradient = FieldR(Vks.grid, data=Vks.data.grad)
             state.K_gradient = state.gradient
         state.energy = dft.energy
+
+    def perturb_n_electrons(self, delta_n_electrons: float) -> Energy:
+        """Return energy changes due to finite perturbation of electron count.
+        Restore state to unperturbed state after calculation."""
+        # Backup current state:
+        dft = self.dft
+        energy0 = Energy({name: value.item() for name, value in dft.energy.items()})
+        Vks0 = self.Vks.clone()
+
+        # Perturb:
+        dft.n_electrons += delta_n_electrons
+        self.optimize()
+        denergy = Energy(
+            {name: (value.item() - energy0[name]) for name, value in dft.energy.items()}
+        )
+
+        # Restore original state:
+        dft.n_electrons -= delta_n_electrons
+        self.Vks = Vks0
+        self.compute(MinimizeState[FieldR](), energy_only=True)
+        return denergy
