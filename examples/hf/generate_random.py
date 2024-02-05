@@ -21,6 +21,7 @@ batch(
         seed=randint(1, np.iinfo(np.int32).max),
     ),
     lbda=dict(min=0.1, max=5.0, step=0.2),
+    dn_electrons_dlbda=Choice(np.arange(0.0, 0.251, 0.05)),
     periodic=True,
 )
 

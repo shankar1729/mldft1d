@@ -37,12 +37,12 @@ def plot_data(data_file: str) -> None:
 
         # Plot potentials
         plt.figure()
-        for i_pert, dE_dn_cur in enumerate(dE_dn):
-            plt.plot(z, dE_dn_cur[i_site], color=cmap(normalize(i_pert)), lw=1)
-        # --- plot external potential shape for comparison
-        plt.plot(z, V[i_site], color="k", lw=1, ls="dashed")
+        n_dE_dn = n * dE_dn
+        for i_pert, n_dE_dn_cur in enumerate(n_dE_dn):
+            plt.plot(z, n_dE_dn_cur[i_site], color=cmap(normalize(i_pert)), lw=1)
+        plt.axhline(0, color="k", lw=1, ls="dashed")
         plt.xlabel(r"$z$")
-        plt.ylabel(r"$\delta E/\delta n(z)$")
+        plt.ylabel(r"$n(z) \cdot \delta E/\delta n(z)$")
         plt.title(f"Site {i_site} potential")
         plt.xlim(z.min(), z.max())
         # --- add colorbar

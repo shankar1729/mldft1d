@@ -33,6 +33,7 @@ def run(
     lbda: dict,  #: min: float, max: float, step: float,
     filename: str,  #: hdf5 filename, must end with .hdf5
     functional: str,  #: name of exact functional to use (hardrods | kohnsham)
+    dn_electrons_dlbda: float = 0.0,  #: optional change of electron count (for hf only)
     **dft_kwargs,  #: extra keyword arguments forwarded to the exact dft
 ) -> None:
 
@@ -47,6 +48,7 @@ def run(
     grid1d = Grid1D(L=L, dz=dz, parallel=False)
     dft = make_exact_dft_map[functional](grid1d=grid1d, n_bulk=n_bulks, **dft_kwargs)
     n0 = dft.n
+    n_electrons0 = n_bulks[0].item() * L
 
     # Initialize potential shape:
     Vdata = torch.stack(
@@ -69,7 +71,10 @@ def run(
     for cur_index in (neg_index, pos_index):
         dft.n = n0
         for index in cur_index:
-            dft.V = lbda_arr[index] * V
+            lbda_cur = lbda_arr[index]
+            dft.V = lbda_cur * V
+            if dn_electrons_dlbda and isinstance(dft, hf.DFT):
+                dft.n_electrons = n_electrons0 + dn_electrons_dlbda * lbda_cur
             dft.minimize()
             n[index] = get1D(dft.n.data)
             E[index], dE_dn_cur = dft.training_targets()
