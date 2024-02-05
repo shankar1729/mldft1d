@@ -289,18 +289,29 @@ class DFT:
             # Exact (OEP) case:
             Exx = float(self.energy["Ex"])
             VH = self.n.convolve(self.coulomb_tilde)
-            Vxx = self.oep.Vks - VH - self.V  # up to an additive constant
+            Vxx = self.oep.Vks - (VH + self.V + self.Vnuc)  # up to an additive constant
 
             # Finite difference approach for G=0 component
             log.info("\nFinite difference of OEP to compute Vxx(G=0)")
             DELTA_N_ELECTRONS = 0.01
-            Exx_plus = float(self.oep.perturb_n_electrons(+DELTA_N_ELECTRONS)["Ex"])
-            Exx_minus = float(self.oep.perturb_n_electrons(-DELTA_N_ELECTRONS)["Ex"])
-            Vx_G0 = (Exx_plus - Exx_minus) / (2 * DELTA_N_ELECTRONS)
-            Vx_G0_old = Vxx.integral().item() / self.grid1d.L
-            log.info(f"{Vx_G0 = } {Vx_G0_old = }\n")
-            Vxx += Vx_G0 - Vx_G0_old
+            half_by_N = 0.5 / DELTA_N_ELECTRONS
+            energy_plus, n_plus = self.oep.perturb_n_electrons(+DELTA_N_ELECTRONS)
+            energy_minus, n_minus = self.oep.perturb_n_electrons(-DELTA_N_ELECTRONS)
+            delta_n = (n_plus - n_minus) * half_by_N
+            Vx_delta_n = float(energy_plus["Ex"] - energy_minus["Ex"]) * half_by_N
+            Vx_delta_n_old = (Vxx ^ delta_n).item()
+            log.info(f"{Vx_delta_n = } {Vx_delta_n_old = }\n")
+            Vxx += Vx_delta_n - Vx_delta_n_old
 
+            """
+            Vxx += delta_n * ((Vx_delta_n - Vx_delta_n_old)/(delta_n ^ delta_n).item())
+
+            from qimpy.algorithms import MinimizeState
+            self.oep.Vks = Vxx + VH + self.V + self.Vnuc
+            self.oep.compute(MinimizeState[FieldR], energy_only=True)
+            log.info(f"Exx: new: {self.energy['Ex'].item()}  original = {Exx}")
+            self.oep.optimize()
+            """
             return Exx, Vxx
         else:
             # LDA / ML case:

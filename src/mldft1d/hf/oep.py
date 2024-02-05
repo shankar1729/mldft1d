@@ -79,23 +79,21 @@ class OEP(Minimize[FieldR]):
             state.K_gradient = state.gradient
         state.energy = dft.energy
 
-    def perturb_n_electrons(self, delta_n_electrons: float) -> Energy:
-        """Return energy changes due to finite perturbation of electron count.
+    def perturb_n_electrons(self, delta_n_electrons: float) -> tuple[Energy, FieldR]:
+        """Return energy and density after finite perturbation of electron count.
         Restore state to unperturbed state after calculation."""
         # Backup current state:
         dft = self.dft
-        energy0 = Energy({name: value.item() for name, value in dft.energy.items()})
         Vks0 = self.Vks.clone()
 
         # Perturb:
         dft.n_electrons += delta_n_electrons
         self.optimize()
-        denergy = Energy(
-            {name: (value.item() - energy0[name]) for name, value in dft.energy.items()}
-        )
+        energy = Energy({name: value.item() for name, value in dft.energy.items()})
+        n = dft.n.clone()
 
         # Restore original state:
         dft.n_electrons -= delta_n_electrons
         self.Vks = Vks0
         self.compute(MinimizeState[FieldR](), energy_only=True)
-        return denergy
+        return energy, n
