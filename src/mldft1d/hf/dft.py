@@ -302,16 +302,6 @@ class DFT:
             Vx_delta_n_old = (Vxx ^ delta_n).item()
             log.info(f"{Vx_delta_n = } {Vx_delta_n_old = }\n")
             Vxx += Vx_delta_n - Vx_delta_n_old
-
-            """
-            Vxx += delta_n * ((Vx_delta_n - Vx_delta_n_old)/(delta_n ^ delta_n).item())
-
-            from qimpy.algorithms import MinimizeState
-            self.oep.Vks = Vxx + VH + self.V + self.Vnuc
-            self.oep.compute(MinimizeState[FieldR], energy_only=True)
-            log.info(f"Exx: new: {self.energy['Ex'].item()}  original = {Exx}")
-            self.oep.optimize()
-            """
             return Exx, Vxx
         else:
             # LDA / ML case:

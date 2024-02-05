@@ -200,10 +200,8 @@ def run(
         plt.figure()
         for dft_name, dft in dfts.items():
             _, Vtarget = dft.training_targets()
-            # plt.plot(z1d, get1D(Vtarget.data[0]), label=dft_name)
             plt.plot(z1d, get1D(Vtarget.data[0] * dft.n.data[0]), label=dft_name)
         plt.xlabel("z")
-        # plt.ylabel(r"$V_{target}$")
         plt.ylabel(r"$V_{target} \cdot n$")
         plt.legend()
         plt.savefig(f"{run_name}_Vtarget.pdf", bbox_inches="tight")
