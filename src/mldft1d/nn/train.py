@@ -19,6 +19,7 @@ class Trainer(torch.nn.Module):  # type: ignore
     n_perturbations_test_tot: int  #: Total number of perturbations in testing data
     data_train: Sequence[Data]  #: Training data (local to process)
     data_test: Sequence[Data]  #: Testing data (local to process)
+    weight_V_by_n: bool  #: Whether to weight error in V by density n during training
 
     def __init__(
         self,
@@ -26,10 +27,12 @@ class Trainer(torch.nn.Module):  # type: ignore
         functional: Functional,
         filenames: Sequence[str],
         train_fraction: float,
+        weight_V_by_n: float,
     ) -> None:
         super().__init__()
         self.comm = comm
         self.functional = functional
+        self.weight_V_by_n = weight_V_by_n
 
         # Split filenames into train and test sets:
         n_train_tot = int(len(filenames) * train_fraction)
@@ -75,6 +78,8 @@ class Trainer(torch.nn.Module):  # type: ignore
         Eerr = self.functional.get_energy(data.n) - data.E
         V = torch.autograd.grad(Eerr.sum(), data.n.data, create_graph=True)[0]
         Verr = V - data.dE_dn.data * data.grid1d.dz  # error in partial derivative dE/dn
+        if self.weight_V_by_n:
+            Verr *= data.n.data
         return Eerr.square().sum(), Verr.square().sum()  # converted to MSE loss below
 
     def train_loop(
@@ -132,6 +137,7 @@ def load_data(
     *,
     filenames: Union[str, Sequence[str]],
     train_fraction: float = 0.8,
+    weight_V_by_n: bool = False,
 ) -> Trainer:
     # Expand list of filenames:
     filenames = [filenames] if isinstance(filenames, str) else filenames
@@ -141,7 +147,7 @@ def load_data(
     assert len(filenames_expanded)
 
     # Create trainer with specified functional and data split:
-    return Trainer(comm, functional, filenames_expanded, train_fraction)
+    return Trainer(comm, functional, filenames_expanded, train_fraction, weight_V_by_n)
 
 
 def get_optimizer(
