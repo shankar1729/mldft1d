@@ -15,7 +15,7 @@ functionals:
     hf_ml:
       T: 0.01
       load_file: gaussian/1layer/params.dat
-  #ML-gaussian-3layer:
-    #hf_ml:
-      #T: 0.01
-      #load_file: gaussian/3layer/params.dat
+  ML-gaussian-3layer:
+    hf_ml:
+      T: 0.01
+      load_file: gaussian/3layer/params.dat
