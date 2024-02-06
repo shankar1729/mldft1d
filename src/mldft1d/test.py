@@ -175,7 +175,19 @@ def run(
         # Plot band structures:
         if hf_dfts:
             plt.figure()
-            styles = ["b-", "r:", "k--", "g:", "m--", "c"]
+            # ordered list of python's default plotting colors
+            styles = [
+                "#1f77b4",
+                "#ff7f0e",
+                "#2ca02c",
+                "#d62728",
+                "#9467bd",
+                "#8c564b",
+                "#e377c2",
+                "#7f7f7f",
+                "#bcbd22",
+                "#17becf",
+            ]
             for (dft_name, dft), style in zip(hf_dfts.items(), styles):
                 k = dft.k.numpy() if dft.periodic else np.array([0.0, 1.0])
                 eig = dft.eig.detach().to(rc.cpu).numpy()
@@ -183,14 +195,11 @@ def run(
                     eig = np.repeat(eig, 2, axis=0)
                 mu = dft.mu.item()
                 n_plot = np.max(np.where(eig < mu), axis=1)[1] + 4
-                plt.plot(k, eig[:, :n_plot] - mu, style, label=dft_name)
+                plt.plot(k, eig[:, :n_plot] - mu, "-", color=style, label=dft_name)
             plt.xlabel("$k$")
             plt.ylabel(r"$\epsilon_{nk}-\mu$")
             plt.legend(
-                [
-                    Line2D([0], [0], color=style[0], linestyle=style[1:])
-                    for style in styles
-                ],
+                [Line2D([0], [0], color=style, linestyle="-") for style in styles],
                 hf_dfts.keys(),
             )
             plt.axhline(0, color="k", linestyle="dotted")
