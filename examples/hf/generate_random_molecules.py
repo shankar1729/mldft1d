@@ -8,7 +8,7 @@ qp.io.log_config()  # default set up to log from MPI head alone
 qp.log.info("Using QimPy " + qp.__version__)
 qp.rc.init()
 
-n_batch = 1
+n_batch = 8192
 prefix = "random_molecules/molecule"
 dz = 0.1  # grid resolution
 padding = 20.0  # distance between periodic images
@@ -42,7 +42,8 @@ for i_batch in range(1 + division.i_start, 1 + division.i_stop):
             T=0.01,  # Fermi smearing width
             lbda=dict(min=1.0, max=1.1, step=1.0),  # scale = 1 only (i.e. no scaling)
             periodic=True,
-            Vshape=dict(shape="coulomb1d", ionpos=positions, Zs=-Z, fractional=False),
+            nuclei=dict(positions=positions, charges=Z),
+            Vshape=dict(shape="none"),
         )
     except Exception as err:
         qp.log.error(f"Failed with exception {err}")

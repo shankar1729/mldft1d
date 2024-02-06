@@ -1,6 +1,6 @@
 L: 10.0
 dz: 0.1
-n_bulk: 0.6
+n_bulk: 0.9
 periodic: True
 
 lbda: 1.0

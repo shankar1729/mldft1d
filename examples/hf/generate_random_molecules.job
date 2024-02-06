@@ -1,0 +1,6 @@
+#!/bin/bash
+#SBATCH -p phi -c 1 -n 256 -t 6:00:00 --hint=nomultithread -o generate_random_molecules.log
+
+module load venv/qimpy openmpi-gpu
+
+mpirun python generate_random_molecules.py

@@ -82,12 +82,15 @@ def run(
 
     f = h5py.File(filename, "w")
     f["z"] = get1D(grid1d.z)
-    f["V"] = get1D(Vdata)
+    f["V"] = get1D(
+        Vdata + (dft.Vnuc.data if isinstance(dft, hf.DFT) else torch.zeros_like(Vdata))
+    )
     f["n"] = n
     f["E"] = E
     f["dE_dn"] = dE_dn
     for dft_arg_name, dft_arg_value in dft_kwargs.items():
-        f.attrs[dft_arg_name] = dft_arg_value
+        if not (isinstance(dft_arg_value, dict) or isinstance(dft_arg_value, list)):
+            f.attrs[dft_arg_name] = dft_arg_value
     f.close()
 
 
