@@ -7,7 +7,7 @@ functional:
     weight-functions: {type: gaussian, sigma-max: 4.0, degree: 1}
 
 data:
-  filenames: ../../random_data/*.h5
+  filenames: ../../random_*/*.h5
   train-fraction: 0.8
   weight-V-by-n: yes
 

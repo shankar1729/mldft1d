@@ -7,7 +7,7 @@ functional:
     weight-functions: {type: nn, hidden-sizes: [30, 30], sigma: 1.0}
 
 data:
-  filenames: ../random_data/*.h5
+  filenames: ../random_*/*.h5
   train-fraction: 0.8
   weight-V-by-n: yes
 

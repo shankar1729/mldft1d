@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -p gpu -n 4 --gres=gpu:4 -o train.log
+#SBATCH -p gpu -n 4 --gres=gpu:4 -t 1-0 -o train.log
 
 module load openmpi-gpu
 module load venv/qimpy
