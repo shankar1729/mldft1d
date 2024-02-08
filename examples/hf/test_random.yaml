@@ -10,4 +10,3 @@ Vshape:
   sigma: 1.0
 
 include: test_common.yaml
-

@@ -156,7 +156,7 @@ def run(
                         plt.figure()
                         w_tilde = layer.get_w_tilde(grid1d.grid, n_dim_tot=3)
                         w = torch.fft.irfft(w_tilde).real / dz
-                        for label, style, w_set, n_nonlocal in zip(
+                        for label, color, w_set, n_nonlocal in zip(
                             ("Even", "Odd"),
                             ("r", "b"),
                             w.detach().to(rc.cpu).split(layer.n_weights, dim=1),
@@ -165,7 +165,7 @@ def run(
                             w_np = w_set[:, :n_nonlocal].flatten(0, 1).numpy()
                             label = f"{label} weights"
                             for i_w, w_i in enumerate(w_np):
-                                plt.plot(z1d, w_i, style, label=("" if i_w else label))
+                                plt.plot(z1d, w_i, color, label=("" if i_w else label))
                         plt.xlim(0, 0.5 * L)
                         plt.xlabel("$z$")
                         plt.ylabel("$w(z)$")
@@ -175,31 +175,19 @@ def run(
         # Plot band structures:
         if hf_dfts:
             plt.figure()
-            # ordered list of python's default plotting colors
-            styles = [
-                "#1f77b4",
-                "#ff7f0e",
-                "#2ca02c",
-                "#d62728",
-                "#9467bd",
-                "#8c564b",
-                "#e377c2",
-                "#7f7f7f",
-                "#bcbd22",
-                "#17becf",
-            ]
-            for (dft_name, dft), style in zip(hf_dfts.items(), styles):
+            colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+            for (dft_name, dft), color in zip(hf_dfts.items(), colors):
                 k = dft.k.numpy() if dft.periodic else np.array([0.0, 1.0])
                 eig = dft.eig.detach().to(rc.cpu).numpy()
                 if not dft.periodic:
                     eig = np.repeat(eig, 2, axis=0)
                 mu = dft.mu.item()
                 n_plot = np.max(np.where(eig < mu), axis=1)[1] + 4
-                plt.plot(k, eig[:, :n_plot] - mu, "-", color=style, label=dft_name)
+                plt.plot(k, eig[:, :n_plot] - mu, "-", color=color, label=dft_name)
             plt.xlabel("$k$")
             plt.ylabel(r"$\epsilon_{nk}-\mu$")
             plt.legend(
-                [Line2D([0], [0], color=style, linestyle="-") for style in styles],
+                [Line2D([0], [0], color=color, linestyle="-") for color in colors],
                 hf_dfts.keys(),
             )
             plt.axhline(0, color="k", linestyle="dotted")
