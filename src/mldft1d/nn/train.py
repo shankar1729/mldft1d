@@ -60,7 +60,7 @@ class Trainer(torch.nn.Module):  # type: ignore
                 f" of {n_perturbations_tot} perturbations):"
             )
             for data in data_set:
-                assert functional.layers[0].n_inputs == data.n.data.shape[0]
+                assert functional.layers[0].n_in[0] == data.n.data.shape[0]
                 qp.log.info(f"  {data}")
             return n_perturbations_tot
 

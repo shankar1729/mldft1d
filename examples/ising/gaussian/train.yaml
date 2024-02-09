@@ -2,10 +2,10 @@ functional:
   load-file: params.dat
   attr-names: [T]  # Train with temperature dependence
   layers:
-  - n-weights: [5, 3]
-    n-outputs: 1
-    hidden-sizes: [30, 30]
+  - n-out: [5, 0]
     weight-functions: {type: gaussian, sigma-max: 20.0, degree: 1}
+  readout: [100, 100, 100]
+  wda: yes
 
 data:
   filenames: ../random_data/*.h5
@@ -14,7 +14,7 @@ data:
 train:
   loss-curve: loss.dat
   save-file: params.dat
-  save-interval: 30
+  save-interval: 20
   epochs: 1000
   batch-size: 400
   energy-loss-scale: 1.0
@@ -22,4 +22,3 @@ train:
   lr: 1.0E-3
   weight-decay: 1.0E-3
   foreach: no  # Torch 2.1 bug in Adam
-

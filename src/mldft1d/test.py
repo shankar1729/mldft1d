@@ -156,20 +156,16 @@ def run(
                         plt.figure()
                         w_tilde = layer.get_w_tilde(grid1d.grid, n_dim_tot=3)
                         w = torch.fft.irfft(w_tilde).real / dz
-                        for label, color, w_set, n_nonlocal in zip(
-                            ("Even", "Odd"),
-                            ("r", "b"),
-                            w.detach().to(rc.cpu).split(layer.n_weights, dim=1),
-                            layer.n_nonlocal,
-                        ):
-                            w_np = w_set[:, :n_nonlocal].flatten(0, 1).numpy()
-                            label = f"{label} weights"
-                            for i_w, w_i in enumerate(w_np):
-                                plt.plot(z1d, w_i, color, label=("" if i_w else label))
+                        for w_i in w.detach().to(rc.cpu).flatten(0, 1).numpy():
+                            is_even = np.abs(w_i[0]) > 1e-6 * np.max(np.abs(w_i))
+                            plt.plot(z1d, w_i, color=("r" if is_even else "b"))
                         plt.xlim(0, 0.5 * L)
                         plt.xlabel("$z$")
                         plt.ylabel("$w(z)$")
-                        plt.legend()
+                        plt.legend(
+                            [Line2D([0], [0], color=color) for color in "rb"],
+                            ["Even weights", "Odd weights"],
+                        )
                         plt.title(f"Weight functions in layer {i_layer} for {dft_name}")
 
         # Plot band structures:

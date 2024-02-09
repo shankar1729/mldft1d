@@ -1,21 +1,13 @@
 functional:
   load-file: params.dat
   layers:
-  - n-weights: [5, 3]
-    n-outputs: 10
-    hidden-sizes: [30, 30]
-    activation: gelu
+  - n-out: [5, 5]
     weight-functions: {type: gaussian, sigma_max: 2.0, degree: 1}
-  - n-weights: [5, 3]
-    n-outputs: 10
-    hidden-sizes: [30, 30]
-    activation: gelu
+  - n-out: [5, 5]
     weight-functions: {type: gaussian, sigma_max: 4.0, degree: 1}
-  - n-weights: [5, 3]
-    n-outputs: 1
-    hidden-sizes: [30, 30]
-    activation: gelu
+  - n-out: [5, 5]
     weight-functions: {type: gaussian, sigma_max: 8.0, degree: 1}
+  readout: [100, 100, 100]
 
 data:
   filenames: ../../random_*/*.h5

@@ -2,13 +2,9 @@ functionals:
   Exact:
     kohnsham-exact:
       T: 0.01  # Fermi smearing width
-  ML-cspline-1layer:
+  ML-nn:
     kohnsham-ml:
-      load_file: cspline/1layer/params.dat
-      energy_threshold: 1.0e-5
-  ML-cspline-3layer:
-    kohnsham-ml:
-      load_file: cspline/3layer/params.dat
+      load_file: nn/params.dat
       energy_threshold: 1.0e-5
   ML-gaussian-1layer:
     kohnsham-ml:
@@ -18,4 +14,3 @@ functionals:
     kohnsham-ml:
       load_file: gaussian/3layer/params.dat
       energy_threshold: 1.0e-5
-

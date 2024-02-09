@@ -2,10 +2,9 @@ functional:
   load-file: params.dat
   n-sites: 2
   layers:
-  - n-weights: [5, 3]
-    n-outputs: 2
-    hidden-sizes: [30, 30]
-    weight-functions: {type: gaussian, sigma-max: 2.0, degree: 1}
+  - n-out: [5, 5]
+    weight-functions: {type: gaussian, sigma-max: 1.0, degree: 1}
+  readout: [100, 100, 100]
 
 data:
   filenames: ../random_data/*.h5
@@ -14,7 +13,7 @@ data:
 train:
   loss-curve: loss.dat
   save-file: params.dat
-  save-interval: 30
+  save-interval: 20
   epochs: 1000
   batch-size: 400
   energy-loss-scale: 1.0
