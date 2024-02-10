@@ -96,7 +96,7 @@ class Trainer(torch.nn.Module):  # type: ignore
         for data_batch in random_batch_split(self.data_train, n_batches):
             qp.rc.comm.Barrier()
             # Step using total gradient over batch:
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=False)
             for data in data_batch:
                 lossE, lossV = self(data)
                 (lossE * energy_loss_scale + lossV).backward()
