@@ -1,4 +1,7 @@
 functionals:
+  LDA:
+    kohnsham-lda:
+      T: 0.01
   Exact:
     kohnsham-exact:
       T: 0.01  # Fermi smearing width

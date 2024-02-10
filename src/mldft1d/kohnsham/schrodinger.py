@@ -112,11 +112,18 @@ class ThomasFermi:
         self.prefactor = (np.pi**2) / 24
         self.T = T
 
-    def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
+    def __call__(self, n: torch.Tensor) -> torch.Tensor:
+        """Underlying elementwise calculator prior to any dimension contractions."""
         e = self.prefactor * (n**3)  # Thomas-Fermi (T=0) part in 1D
         if self.T:
             e += n * self.energy_correction_per_particle(n)
-        return e.sum(dim=-1)
+        return e
+
+    def get_energy(self, n: FieldR) -> torch.Tensor:
+        return FieldR(n.grid, data=self(n.data)).integral().sum(dim=0)
+
+    def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
+        return self(n).sum(dim=-1)
 
     def energy_correction_per_particle(self, n: torch.Tensor) -> torch.Tensor:
         x = n.square() / (2 * self.T)
