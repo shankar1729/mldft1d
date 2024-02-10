@@ -1,4 +1,5 @@
 a: 1.0
+nc: 0.01
 
 functionals:
   LDA:

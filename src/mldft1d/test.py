@@ -41,6 +41,7 @@ def run(
     functionals: dict,
     run_name: str,
     n_bulk_range: Sequence[tuple[float, float]] = ((0.0, 1.0),),
+    nc=0.0,
     **dft_common_args,
 ):
     # Check site density / potential counts:
@@ -194,9 +195,10 @@ def run(
         plt.figure()
         for dft_name, dft in dfts.items():
             _, Vtarget = dft.training_targets()
-            plt.plot(z1d, get1D(Vtarget.data[0] * dft.n.data[0]), label=dft_name)
+            weight = (0.5 * torch.erfc(-torch.log(dft.n.data[0] / nc))) if nc else 1.0
+            plt.plot(z1d, get1D(Vtarget.data[0] * weight), label=dft_name)
         plt.xlabel("z")
-        plt.ylabel(r"$V_{target} \cdot n$")
+        plt.ylabel(rf"$V_{{target}}$ (Weighted with $n_c$ = {nc:.1e})")
         plt.legend()
         plt.savefig(f"{run_name}_Vtarget.pdf", bbox_inches="tight")
 

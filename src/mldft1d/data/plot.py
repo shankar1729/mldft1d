@@ -4,9 +4,10 @@ import h5py
 from matplotlib import colors, cm
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.special import erfc
 
 
-def plot_data(data_file: str) -> None:
+def plot_data(data_file: str, nc: float = 0.0) -> None:
     with h5py.File(data_file, "r") as f:
         z = np.array(f["z"])
         V = np.array(f["V"])
@@ -37,12 +38,13 @@ def plot_data(data_file: str) -> None:
 
         # Plot potentials
         plt.figure()
-        n_dE_dn = n * dE_dn
-        for i_pert, n_dE_dn_cur in enumerate(n_dE_dn):
-            plt.plot(z, n_dE_dn_cur[i_site], color=cmap(normalize(i_pert)), lw=1)
+        weight = (0.5 * erfc(-np.log(n / nc))) if nc else 1.0
+        w_dE_dn = weight * dE_dn
+        for i_pert, w_dE_dn_cur in enumerate(w_dE_dn):
+            plt.plot(z, w_dE_dn_cur[i_site], color=cmap(normalize(i_pert)), lw=1)
         plt.axhline(0, color="k", lw=1, ls="dashed")
         plt.xlabel(r"$z$")
-        plt.ylabel(r"$n(z) \cdot \delta E/\delta n(z)$")
+        plt.ylabel(rf"$\delta E/\delta n(z)$ (Weighted with $n_c$ = {nc:.1e})")
         plt.title(f"Site {i_site} potential")
         plt.xlim(z.min(), z.max())
         # --- add colorbar
@@ -73,10 +75,11 @@ def plot_data(data_file: str) -> None:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python plot.py <data.h5>")
+        print("Usage: python plot.py <data.h5> [<nc>=0]")
         exit(1)
     data_file = sys.argv[1]
-    plot_data(data_file)
+    nc = float(sys.argv[2]) if (len(sys.argv) > 2) else 0.0
+    plot_data(data_file, nc)
 
 
 if __name__ == "__main__":
