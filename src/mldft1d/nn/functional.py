@@ -192,9 +192,10 @@ class Functional(torch.nn.Module):  # type: ignore
     def allreduce_parameters_grad(self, comm: MPI.Comm) -> None:
         """Sum module parameter gradients over `comm`."""
         if comm.size > 1:
-            for i_param, parameter in enumerate(self.parameters()):
-                comm.Allreduce(MPI.IN_PLACE, BufferView(parameter.grad))
-
+            for parameter in self.parameters():
+                buf = torch.zeros_like(parameter.grad)
+                comm.Allreduce(BufferView(parameter.grad), BufferView(buf))
+                parameter.grad = buf  # Avoiding in-place op due to Cray-MPI bug
 
 def merge_and_check_dicts(d: dict, d_in: dict) -> None:
     """Merge entries from `d_in` into `d`. Any entry already in `d` must match `d_in`"""
