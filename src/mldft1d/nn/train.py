@@ -97,12 +97,16 @@ class Trainer(torch.nn.Module):  # type: ignore
             qp.rc.comm.Barrier()
             # Step using total gradient over batch:
             optimizer.zero_grad(set_to_none=False)
+            lossE_batch = None
+            lossV_batch = None
             for data in data_batch:
                 lossE, lossV = self(data)
-                (lossE * energy_loss_scale + lossV).backward()
-                lossE_total += lossE.item()
-                lossV_total += lossV.item()
+                lossE_batch = lossE if (lossE_batch is None) else (lossE_batch + lossE)
+                lossV_batch = lossV if (lossV_batch is None) else (lossV_batch + lossV)
                 n_perturbations += data.n_perturbations
+            (lossE_batch * energy_loss_scale + lossV_batch).backward()
+            lossE_total += lossE_batch.item()
+            lossV_total += lossV_batch.item()
             self.functional.allreduce_parameters_grad(self.comm)
             optimizer.step()
             self.functional.bcast_parameters(self.comm)
