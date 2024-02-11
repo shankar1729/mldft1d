@@ -23,6 +23,7 @@ class Functional(torch.nn.Module):  # type: ignore
     activation_weights: torch.nn.ModuleList  #: Weights for inter-layer activation
     readout: Function  #: Final read-out function to compute energy density
     wda: bool  #: If true, readout per-particle energy (WDA), else rank-2 approximation
+    use_local: bool  #: If true, include local densities as input to readout network
     grid_bulk: Grid  #: Trivial grid for bulk free energy calculations
 
     def __init__(
@@ -36,6 +37,7 @@ class Functional(torch.nn.Module):  # type: ignore
         activation: str = "softplus",
         readout: list[int],
         wda: bool = False,
+        use_local: bool = False,
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
@@ -68,6 +70,7 @@ class Functional(torch.nn.Module):  # type: ignore
 
         # Setup readout:
         self.wda = wda
+        self.use_local = use_local
         if wda:
             if n_odd:
                 raise ValueError("WDA should only have even densities from final layer")
@@ -78,7 +81,7 @@ class Functional(torch.nn.Module):  # type: ignore
             )
             n_readout = sum(self.n_readout_split)
         self.readout = Function(
-            n_in=(n_even + len(self.attrs)),
+            n_in=(n_even + len(self.attrs) + (n_sites if use_local else 0)),
             n_out=n_readout,
             n_hidden=readout,
             activation=activation,
@@ -141,6 +144,7 @@ class Functional(torch.nn.Module):  # type: ignore
             activation=self.activation.__class__.__name__.lower(),
             readout=self.readout.n_hidden,
             wda=self.wda,
+            use_local=self.use_local,
             state=self.state_dict(),
         )
         if comm.rank == 0:
@@ -164,6 +168,8 @@ class Functional(torch.nn.Module):  # type: ignore
         if len(self.attrs):
             attrs = repeat_end(self.attrs, scalars.shape[1:])
             scalars = torch.cat((scalars, attrs), dim=0)
+        if self.use_local:
+            scalars = torch.cat((scalars, n.data), dim=0)
         f = self.readout(scalars)
         if self.wda:
             return (n ^ FieldR(n.grid, data=f)).sum(dim=0)
@@ -196,6 +202,7 @@ class Functional(torch.nn.Module):  # type: ignore
                 buf = torch.zeros_like(parameter.grad)
                 comm.Allreduce(BufferView(parameter.grad), BufferView(buf))
                 parameter.grad = buf  # Avoiding in-place op due to Cray-MPI bug
+
 
 def merge_and_check_dicts(d: dict, d_in: dict) -> None:
     """Merge entries from `d_in` into `d`. Any entry already in `d` must match `d_in`"""
