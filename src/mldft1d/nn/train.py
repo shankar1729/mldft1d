@@ -28,6 +28,7 @@ class Trainer(torch.nn.Module):  # type: ignore
         filenames: Sequence[str],
         train_fraction: float,
         weight_nc: float,
+        fuse_files: bool,
     ) -> None:
         super().__init__()
         self.comm = comm
@@ -46,10 +47,14 @@ class Trainer(torch.nn.Module):  # type: ignore
         filenames_test = random_mpi_split(filenames_test_all, comm)
 
         # Load and fuse training set:
-        self.data_train = fuse_data([Data(filename) for filename in filenames_train])
+        self.data_train = [Data(filename) for filename in filenames_train]
+        if fuse_files:
+            self.data_train = fuse_data(self.data_train)
 
         # Load and fuse test set:
-        self.data_test = fuse_data([Data(filename) for filename in filenames_test])
+        self.data_test = [Data(filename) for filename in filenames_test]
+        if fuse_files:
+            self.data_test = fuse_data(self.data_test)
 
         # Report loaded data:
         def report(name: str, data_set: Sequence[Data]) -> int:
@@ -142,6 +147,7 @@ def load_data(
     filenames: Union[str, Sequence[str]],
     train_fraction: float = 0.8,
     weight_nc: float = 0.0,
+    fuse_files: bool = True,
 ) -> Trainer:
     # Expand list of filenames:
     filenames = [filenames] if isinstance(filenames, str) else filenames
@@ -151,7 +157,9 @@ def load_data(
     assert len(filenames_expanded)
 
     # Create trainer with specified functional and data split:
-    return Trainer(comm, functional, filenames_expanded, train_fraction, weight_nc)
+    return Trainer(
+        comm, functional, filenames_expanded, train_fraction, weight_nc, fuse_files
+    )
 
 
 def get_optimizer(
