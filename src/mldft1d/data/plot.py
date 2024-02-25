@@ -25,8 +25,6 @@ def plot_data(data_file: str, nc: float = 0.0) -> None:
         plt.figure()
         for i_pert, n_cur in enumerate(n):
             plt.plot(z, n_cur[i_site], color=cmap(normalize(i_pert)), lw=1)
-        # Plot external potential shape for comparison
-        plt.plot(z, V[i_site], color="k", lw=1, ls="dashed")
         plt.xlabel(r"$z$")
         plt.ylabel(r"$n(z)$")
         plt.title(f"Site {i_site} density")
@@ -35,6 +33,10 @@ def plot_data(data_file: str, nc: float = 0.0) -> None:
         sm = cm.ScalarMappable(cmap=cmap, norm=normalize)
         sm.set_array([])
         plt.colorbar(sm, label=r"Calculation index", ax=plt.gca())
+        # Plot external potential shape for comparison
+        plt.sca(plt.gca().twinx())
+        plt.plot(z, V[i_site], color="k", lw=1, ls="dashed")
+        plt.ylabel(f"Site {i_site} applied potential shape")
 
         # Plot potentials
         plt.figure()

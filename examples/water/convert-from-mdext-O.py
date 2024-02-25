@@ -24,8 +24,8 @@ T = 300 * T_unit  # in atomic units
 bulk_ramp = 3.0  # in bohrs
 
 # Bulk EOS properties of water
-a_bulk = -0.000058375785  # bulk free energy density (computed with A_id := T n log n)
-a_n_bulk = -0.011810581224  # density derivative in bulk condition
+a_bulk = -0.000049418134  # bulk free energy density (with A_id := T n log n/n_unit)
+a_n_bulk = -0.009996667327  # density derivative in bulk condition
 mu = a_n_bulk
 
 
@@ -85,6 +85,8 @@ def convert(src_path: str, out_file: str) -> None:
     slice_reverse = slice(-2, 0, -1)
     dr = r[1] - r[0]
     L = 2 * r[-1]
+    dOmega = dr * (r_unit**2)  # setting transverse size to 1 A (not bohr)
+    Omega = L * (r_unit**2)
     r = np.concatenate((r, L - r[slice_reverse]))
     V = np.concatenate((V, V[:, slice_reverse]), axis=1)
     n = np.concatenate((n, n[:, slice_reverse]), axis=1)
@@ -96,17 +98,17 @@ def convert(src_path: str, out_file: str) -> None:
     # Construct total energies by TI:
     n_mid = 0.5 * (n[:-1] + n[1:])
     delta_V = np.diff(V, axis=0)
-    delta_E = (n_mid * delta_V).sum(axis=-1) * dr
-    E = np.concatenate(([0], np.cumsum(delta_E))) + a_bulk * L
-    E_ex = E - (n * (T * np.log(n) + V - mu)).sum(axis=1) * dr
+    delta_E = (n_mid * delta_V).sum(axis=-1) * dOmega
+    E = np.concatenate(([0], np.cumsum(delta_E))) + a_bulk * Omega
+    E_ex = E - (n * (T * np.log(n) + V - mu)).sum(axis=1) * dOmega
 
-    # Write hdf5 file:
+    # Write hdf5 file (back in original units to keep things O(1)):
     with h5py.File(out_file, "w") as fp:
-        fp["z"] = r
-        fp["V"] = delta_V[0, None]  # only used in plotting
-        fp["n"] = n[:, None]
-        fp["E"] = E_ex
-        fp["dE_dn"] = V_ex[:, None]
+        fp["z"] = r / r_unit
+        fp["V"] = delta_V[0, None] / V_unit  # only used in plotting
+        fp["n"] = n[:, None] / n_unit
+        fp["E"] = E_ex / V_unit
+        fp["dE_dn"] = V_ex[:, None] / V_unit
     print(
         f"Wrote {out_file} with grid length {L/r_unit:.2f} A"
         f" and spacing {dr/r_unit:.2f} A."
