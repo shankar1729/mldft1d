@@ -7,6 +7,7 @@ from qimpy.io import Unit
 
 r_unit = Unit.MAP["Angstrom"]
 V_unit = Unit.MAP["kcal/mol"]
+T_unit = Unit.MAP["K"]
 n_unit = r_unit ** (-3)
 
 mdext_base_path = "/home/kamron/mdext_KF/examples/water/015datasetZ40replicas22Feb"
@@ -17,7 +18,13 @@ sigma_smooth = 3  # in units of input md grid
 down_sample = 2  # reducistion in resolution for output
 
 n_bulk = 0.0049383  # in atomic units
+T = 300 * T_unit  # in atomic units
 bulk_ramp = 3.0  # in bohrs
+
+# Bulk EOS properties of water
+a_bulk = -0.000058375785  # bulk free energy density (computed with A_id := T n log n)
+a_n_bulk = -0.011810581224  # density derivative in bulk condition
+mu = a_n_bulk
 
 
 def get_data(prefix: str, lbda: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -76,6 +83,10 @@ def convert(src_path: str, out_file: str) -> None:
     n = np.concatenate((n, n[:, slice_reverse]), axis=1)
     print(f"Grid with length {L/r_unit:.2f} A and spacing {dr/r_unit:.2f} A.")
 
+    # Convert V to excess potential using Euler-Lagrange equation:
+    # T(log(n) + 1) + dA_ex/dn + (V_ext - mu) = 0
+    V_ex = mu - V - T * (1.0 + np.log(n))
+
     plt.figure()
     plt.plot(r, n.T)
     plt.ylim(0, None)
@@ -83,12 +94,12 @@ def convert(src_path: str, out_file: str) -> None:
     plt.savefig("test_n.pdf", bbox_inches="tight")
 
     plt.figure()
-    plt.plot(r, V.T)
+    plt.plot(r, V_ex.T)
     plt.savefig("test_V.pdf", bbox_inches="tight")
 
 
 def main() -> None:
-    convert(f"{mdext_base_path}/seed0007", None)
+    convert(f"{mdext_base_path}/seed0191", None)
 
 
 if __name__ == "__main__":
