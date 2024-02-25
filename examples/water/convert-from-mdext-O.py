@@ -1,6 +1,7 @@
+import os
+
 import h5py
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.ndimage import gaussian_filter1d
 
 from qimpy.io import Unit
@@ -11,7 +12,8 @@ T_unit = Unit.MAP["K"]
 n_unit = r_unit ** (-3)
 
 mdext_base_path = "/home/kamron/mdext_KF/examples/water/015datasetZ40replicas22Feb"
-n_replicas = 4
+n_replicas = 4  # number of replicas attempted to be calculated
+n_replicas_min = 3  # process data if these many replicas available
 lbda_arr = np.arange(11) * 0.02  # nominal V amplitude in eV (only used in filenames)
 
 sigma_smooth = 3  # in units of input md grid
@@ -34,6 +36,8 @@ def get_data(prefix: str, lbda: float) -> tuple[np.ndarray, np.ndarray, np.ndarr
     n_arr = []
     for i_replica in range(n_replicas):
         filename = f"{prefix}/replica{(i_replica + 1):04d}/data-U{lbda:+.2f}.h5"
+        if not os.path.isfile(filename):
+            continue
         with h5py.File(filename, "r") as fp:
             r = np.array(fp["r"]) * r_unit
             V = np.array(fp["V"])[:, 1] * V_unit  # only keep O
@@ -44,6 +48,9 @@ def get_data(prefix: str, lbda: float) -> tuple[np.ndarray, np.ndarray, np.ndarr
             r_arr.append(r[::down_sample])
             V_arr.append(V[::down_sample])
             n_arr.append(n[::down_sample])
+
+    if len(n_arr) < n_replicas_min:
+        raise FileNotFoundError
 
     # Bring to common grid and average n:
     nr_min = min(len(r) for r in r_arr)
@@ -81,25 +88,41 @@ def convert(src_path: str, out_file: str) -> None:
     r = np.concatenate((r, L - r[slice_reverse]))
     V = np.concatenate((V, V[:, slice_reverse]), axis=1)
     n = np.concatenate((n, n[:, slice_reverse]), axis=1)
-    print(f"Grid with length {L/r_unit:.2f} A and spacing {dr/r_unit:.2f} A.")
 
     # Convert V to excess potential using Euler-Lagrange equation:
     # T(log(n) + 1) + dA_ex/dn + (V_ext - mu) = 0
     V_ex = mu - V - T * (1.0 + np.log(n))
 
-    plt.figure()
-    plt.plot(r, n.T)
-    plt.ylim(0, None)
-    plt.axhline(n_bulk, color="k", ls="dotted")
-    plt.savefig("test_n.pdf", bbox_inches="tight")
+    # Construct total energies by TI:
+    n_mid = 0.5 * (n[:-1] + n[1:])
+    delta_V = np.diff(V, axis=0)
+    delta_E = (n_mid * delta_V).sum(axis=-1) * dr
+    E = np.concatenate(([0], np.cumsum(delta_E))) + a_bulk * L
+    E_ex = E - (n * (T * np.log(n) + V - mu)).sum(axis=1) * dr
 
-    plt.figure()
-    plt.plot(r, V_ex.T)
-    plt.savefig("test_V.pdf", bbox_inches="tight")
+    # Write hdf5 file:
+    with h5py.File(out_file, "w") as fp:
+        fp["z"] = r
+        fp["V"] = delta_V[0, None]  # only used in plotting
+        fp["n"] = n[:, None]
+        fp["E"] = E_ex
+        fp["dE_dn"] = V_ex[:, None]
+    print(
+        f"Wrote {out_file} with grid length {L/r_unit:.2f} A"
+        f" and spacing {dr/r_unit:.2f} A."
+    )
 
 
 def main() -> None:
-    convert(f"{mdext_base_path}/seed0191", None)
+    for seed in range(288):
+        out_file = f"random-spce-O/random{seed}.h5"
+        if os.path.isfile(out_file):
+            print(f"Skipped {out_file} (already exists)")
+        else:
+            try:
+                convert(f"{mdext_base_path}/seed{seed:04d}", out_file)
+            except FileNotFoundError:
+                print(f"Failed {out_file} due to insufficient replicas")
 
 
 if __name__ == "__main__":
