@@ -1,2 +1,5 @@
 *.pdf
-
+*.dat.*
+*.log.*
+*.png
+*.ipynb

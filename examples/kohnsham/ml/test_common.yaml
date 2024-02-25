@@ -1,0 +1,10 @@
+functionals:
+  LDA:
+    kohnsham-lda:
+      T: 0.01  # Fermi smearing width
+  Exact:
+    kohnsham-exact:
+      T: 0.01
+  ML:
+    kohnsham-ml:
+      load_file: params.dat

@@ -1,0 +1,29 @@
+functional:
+  load-file: params.dat
+  layers:
+  - n-out: [10, 10]
+    weight-functions: {type: gaussian, sigma_max: 4.0, degree: 1}
+  - n-out: [10, 10]
+    weight-functions: {type: gaussian, sigma_max: 4.0, degree: 1}
+  - n-out: [20, 0]
+    weight-functions: {type: gaussian, sigma_max: 4.0, degree: 1}
+  readout: [100, 100, 100]
+  use-local: yes
+  wda: yes
+
+data:
+  filenames: ../random_*/*.h5
+  train-fraction: 0.8
+  weight-nc: 0.01
+
+train:
+  loss-curve: loss.dat
+  save-file: params.dat
+  save-interval: 20
+  epochs: 1200
+  batch-size: 400
+  energy-loss-scale: 1.0
+  method: AdamW
+  lr: 1.0E-3
+  weight-decay: 1.0E-2
+  foreach: no  # to circumvent bug in Adam in pytorch 2.1

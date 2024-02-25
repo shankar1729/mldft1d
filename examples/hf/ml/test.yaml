@@ -1,0 +1,25 @@
+L: 40.0
+dz: 0.1
+n_bulk: 0.05
+periodic: False
+
+lbda: 0.0
+Vshape: {shape: none}
+
+nuclei:
+  positions: [18, 22]
+  charges: [1, 1]
+
+nc: 0.01
+
+functionals:
+  LDA:
+    hf-lda:
+      T: 0.01  # for include mechanism, need non-null dictionary
+  exact:
+    hf_exact:
+      T: 0.01
+  ML-nn:
+    hf_ml:
+      T: 0.01
+      load_file: params.dat
