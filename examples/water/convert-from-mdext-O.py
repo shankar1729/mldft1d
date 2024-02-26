@@ -100,7 +100,8 @@ def convert(src_path: str, out_file: str) -> None:
     n_mid = 0.5 * (n[:-1] + n[1:])
     delta_V = np.diff(V, axis=0)
     delta_E = (n_mid * delta_V).sum(axis=-1) * dOmega
-    E = np.concatenate(([0], np.cumsum(delta_E))) + a_bulk * Omega
+    E0 = Omega * (a_bulk - mu * n_bulk)
+    E = E0 + np.concatenate(([0], np.cumsum(delta_E)))
     E_ex = E - (n * (T * np.log(n) + V - mu)).sum(axis=1) * dOmega
 
     # Write hdf5 file (back in original units to keep things O(1)):
