@@ -98,14 +98,16 @@ def run(
             z1d = get1D(grid1d.z)
             for dft_name, dft in dfts.items():
                 plt.plot(z1d, get1D(dft.n.data[i_site]), label=f"$n$ ({dft_name})")
-            plt.plot(z1d, get1D(V.data[i_site]), ls="dashed", label="$V$")
-            if Vnuc is not None:
-                plt.plot(z1d, get1D(Vnuc.data), ls="dashed", label="$V_{nuc}$")
             plt.axhline(n_bulks[i_site].item(), color="k", ls="dotted")
-            plt.axhline(0.0, color="k", ls="dotted")
             plt.xlabel("z")
-            plt.title(f"Site {i_site}")
             plt.legend()
+            # Plot external potential shape (on separate axis) for comparison
+            plt.sca(plt.gca().twinx())
+            plt.plot(z1d, get1D(V.data[i_site]), "k--", label="$V$")
+            if Vnuc is not None:
+                plt.plot(z1d, get1D(Vnuc.data), "k:", label="$V_{nuc}$")
+            plt.ylabel(f"Site {i_site} applied potential shape")
+            plt.title(f"Site {i_site}")
             plt.savefig(f"{run_name}_site{i_site}.pdf", bbox_inches="tight")
 
         # Compare bulk free energy densities:
