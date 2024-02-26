@@ -4,7 +4,7 @@ import torch
 
 from qimpy import rc
 from .. import Grid1D, Minimizer, protocols, nn
-from . import IdealGas, FMT
+from . import IdealGas, FMT, NumericalLDA
 
 
 def exact(
@@ -32,5 +32,18 @@ def ml(
         grid1d=grid1d,
         n_bulk=n_bulk,
         name="MLCDFT",
+        **kwargs,
+    )
+
+
+def numerical_lda(
+    *, grid1d: Grid1D, n_bulk: torch.Tensor, T: float, filename: str, **kwargs
+) -> protocols.DFT:
+    """Make hard-rods exact DFT."""
+    return Minimizer(
+        functionals=(IdealGas(T), NumericalLDA(filename)),
+        grid1d=grid1d,
+        n_bulk=n_bulk,
+        name="LDA",
         **kwargs,
     )
