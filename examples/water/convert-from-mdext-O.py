@@ -94,7 +94,7 @@ def convert(src_path: str, out_file: str) -> None:
 
     # Convert V to excess potential using Euler-Lagrange equation:
     # T(log(n) + 1) + dA_ex/dn + (V_ext - mu) = 0
-    V_ex = mu - V - T * (1.0 + np.log(n))
+    V_ex = mu - V - T * (1.0 + np.log(n / n_unit))
 
     # Construct total energies by TI:
     n_mid = 0.5 * (n[:-1] + n[1:])
@@ -102,7 +102,7 @@ def convert(src_path: str, out_file: str) -> None:
     delta_E = (n_mid * delta_V).sum(axis=-1) * dOmega
     E0 = Omega * (a_bulk - mu * n_bulk)
     E = E0 + np.concatenate(([0], np.cumsum(delta_E)))
-    E_ex = E - (n * (T * np.log(n) + V - mu)).sum(axis=1) * dOmega
+    E_ex = E - (n * (T * np.log(n / n_unit) + V - mu)).sum(axis=1) * dOmega
 
     # Write hdf5 file (back in original units to keep things O(1)):
     with h5py.File(out_file, "w") as fp:

@@ -264,6 +264,7 @@ class DataDFT:
         self.energy["Ext"] = (self.n ^ V_minus_mu).sum(dim=-1)
         self.energy["Excess"] = self.Etarget
         self.energy["Ideal"] = self.ideal.get_energy(self.n)
+        print(self.energy)
         return self.energy
 
     def training_targets(self) -> tuple[float, FieldR]:
