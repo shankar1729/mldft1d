@@ -88,8 +88,8 @@ def convert(src_path: str, out_file: str) -> None:
     dOmega = dr * (r_unit**2)  # setting transverse size to 1 A (not bohr)
     Omega = L * (r_unit**2)
     r = np.concatenate((r, L - r[slice_reverse]))
-    V = np.concatenate((V, V[:, slice_reverse]), axis=1)
-    n = np.concatenate((n, n[:, slice_reverse]), axis=1)
+    V = np.concatenate((V[:, slice_reverse], V), axis=1)
+    n = np.concatenate((n[:, slice_reverse], n), axis=1)
 
     # Convert V to excess potential using Euler-Lagrange equation:
     # T(log(n) + 1) + dA_ex/dn + (V_ext - mu) = 0
