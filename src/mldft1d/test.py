@@ -7,14 +7,30 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
 import torch
+import h5py
 
 import qimpy
-from qimpy import rc, log, io
+from qimpy import rc, log, io, Energy
 from qimpy.grid import FieldR
 from qimpy.profiler import StopWatch
 from . import Grid1D, get1D, Minimizer, protocols, hardrods, kohnsham, hf, ising, nn
 from .data import v_shape
 from .kohnsham import Schrodinger, ThomasFermi
+
+
+def make_dft_data(
+    *,
+    grid1d: Grid1D,
+    filename: str,
+    i_data: int,
+    n_bulk: torch.Tensor,
+    T: float,
+    mu: Union[float, Sequence[float]],
+) -> protocols.DFT:
+    """Make a DFT that poses a data file as a DFT for comparison.
+    Most useful for comparing to MD data."""
+    mus = torch.tensor([mu] if isinstance(mu, float) else mu, device=rc.device)
+    return DataDFT(grid1d, filename, i_data, T, mus)
 
 
 make_dft_map: dict[str, Callable[..., protocols.DFT]] = {
@@ -28,39 +44,54 @@ make_dft_map: dict[str, Callable[..., protocols.DFT]] = {
     "hf_ml": hf.make_dft.ml,
     "ising_exact": ising.make_dft.exact,
     "ising_ml": ising.make_dft.ml,
+    "data": make_dft_data,
 }  #: Recognized DFTs that can be loaded from YAML input
 
 
 def run(
     *,
-    L: float,
-    dz: float,
+    L: float = 0.0,
+    dz: float = 0.0,
     n_bulk: Union[float, Sequence[float]],
     Vshape: Union[dict, Sequence[dict]],
     lbda: float,
     functionals: dict,
     run_name: str,
     n_bulk_range: Sequence[tuple[float, float]] = ((0.0, 1.0),),
+    data_file: str = "",
     nc=0.0,
     **dft_common_args,
 ):
-    # Check site density / potential counts:
-    Vshape = [Vshape] if isinstance(Vshape, dict) else Vshape
+    # Check site density counts:
     n_bulks = torch.tensor(
         [n_bulk] if isinstance(n_bulk, float) else n_bulk, device=rc.device
     )
     n_sites = len(n_bulks)
-    assert len(Vshape) == n_sites
 
-    # Create grid and external potential:
+    # Create grid:
+    if data_file:
+        with h5py.File(data_file) as fp:
+            z = np.array(fp["z"])
+        dz = z[1] - z[0]
+        L = z[-1] - z[0] + dz
+    assert dz
+    assert L
     grid1d = Grid1D(L=L, dz=dz)
-    Vdata = lbda * torch.stack(
-        [
-            v_shape.get(grid1d, **io.dict.key_cleanup(Vshape_i)).data
-            for Vshape_i in Vshape
-        ]
-    )
-    V = FieldR(grid1d.grid, data=Vdata)
+
+    # Get potential from specified data file or shape:
+    if data_file:
+        with h5py.File(data_file) as fp:
+            Vdata = torch.tensor(fp["V"])[:, None, None]
+    else:
+        Vshape = [Vshape] if isinstance(Vshape, dict) else Vshape
+        assert len(Vshape) == n_sites
+        Vdata = torch.stack(
+            [
+                v_shape.get(grid1d, **io.dict.key_cleanup(Vshape_i)).data
+                for Vshape_i in Vshape
+            ]
+        )
+    V = FieldR(grid1d.grid, data=(lbda * Vdata))
 
     # Create DFTs:
     dfts = dict[str, protocols.DFT]()
@@ -207,6 +238,35 @@ def run(
         rc.report_end()
         StopWatch.print_stats()
         plt.show()
+
+
+class DataDFT:
+    """Pose a read-in (MD) data set as a DFT for comparison."""
+
+    def __init__(
+        self, grid1d: Grid1D, filename: str, i_data: int, T: float, mu: torch.Tensor
+    ) -> None:
+        with h5py.File(filename) as fp:
+            n_data = torch.tensor(fp["n"][i_data])
+            E_n_data = torch.tensor(fp["dE_dn"][i_data])
+            self.n = FieldR(grid1d.grid, data=n_data[:, None, None])
+            self.Vtarget = FieldR(grid1d.grid, data=E_n_data[:, None, None])
+            self.Etarget = float(fp["E"][i_data])
+            self.mu = mu
+            self.V = self.n.zeros_like()
+            self.energy = Energy()
+            self.ideal = hardrods.IdealGas(T)
+
+    def minimize(self) -> Energy:
+        """Solve Euler-Lagrange equation and return equilibrium energy."""
+        V_minus_mu = FieldR(self.V.grid, data=(self.V.data - self.mu.view(-1, 1, 1, 1)))
+        self.energy["Ext"] = (self.n ^ V_minus_mu).sum(dim=-1)
+        self.energy["Excess"] = self.Etarget
+        self.energy["Ideal"] = self.ideal.get_energy(self.n)
+        return self.energy
+
+    def training_targets(self) -> tuple[float, FieldR]:
+        return self.Etarget, self.Vtarget
 
 
 def main() -> None:
