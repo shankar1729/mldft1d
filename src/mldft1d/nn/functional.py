@@ -87,6 +87,11 @@ class Functional(torch.nn.Module):  # type: ignore
             activation=activation,
         )
 
+        # Report parameter count and sync:
+        n_trainable = 0
+        for parameter in self.parameters():
+            n_trainable += parameter.numel()
+        print(f"Created NN functional with {n_trainable} trainable parameters")
         if comm.size > 1:
             self.bcast_parameters(comm)
 

@@ -1,13 +1,13 @@
-L: 40.0
+L: 20.0
 dz: 0.1
-n_bulk: 0.05
-periodic: False
+n_bulk: 0.1
+periodic: True
 
 lbda: 0.0
 Vshape: {shape: none}
 
 nuclei:
-  positions: [18, 22]
+  positions: [8, 12]
   charges: [1, 1]
 
 nc: 0.01

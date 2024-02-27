@@ -127,7 +127,7 @@ def run(
         Vnuc = next(iter(hf_dfts.values())).Vnuc if hf_dfts else None
         for i_site in range(n_sites):
             # Plot density and potential:
-            plt.figure(figsize=(10, 6))
+            plt.figure()
             z1d = get1D(grid1d.z)
             for dft_name, dft in dfts.items():
                 plt.plot(z1d, get1D(dft.n.data[i_site]), label=f"$n$ ({dft_name})")
