@@ -35,6 +35,7 @@ def make_dft_data(
 
 make_dft_map: dict[str, Callable[..., protocols.DFT]] = {
     "hardrods_exact": hardrods.make_dft.exact,
+    "hardrods_lda": hardrods.make_dft.lda,
     "hardrods_ml": hardrods.make_dft.ml,
     "numerical_lda": hardrods.make_dft.numerical_lda,
     "kohnsham_exact": kohnsham.make_dft.exact,

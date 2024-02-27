@@ -57,6 +57,11 @@ class BulkHardRods:
         n1 = 2 * (n @ self.R)
         return -0.5 * self.T * n0 * (1.0 - n1).log()
 
+    def get_energy(self, n: torch.Tensor) -> torch.Tensor:
+        n0 = 2 * n.data.sum(dim=0)
+        n1 = 2 * (self.R @ n.data)
+        return -0.5 * self.T * FieldR(n.grid, data=(n0 * (1.0 - n1).log())).integral()
+
 
 def sum_sites(n: FieldR) -> FieldR:
     return FieldR(n.grid, data=n.data.sum(dim=-4))

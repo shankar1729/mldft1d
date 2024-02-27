@@ -8,9 +8,12 @@ Vshape:
   sigma: 0.1
   duty: 0.4
 
-lbda: 3.0
+lbda: 5.0
 
 functionals:
+  LDA:
+    hardrods-lda:
+      R: 0.5
   Exact:
     hardrods-exact:
       R: 0.5
