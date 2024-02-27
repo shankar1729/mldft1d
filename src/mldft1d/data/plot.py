@@ -1,4 +1,5 @@
 import sys
+import os
 
 import h5py
 from matplotlib import colors, cm
@@ -8,6 +9,7 @@ from scipy.special import erfc
 
 
 def plot_data(data_file: str, nc: float = 0.0) -> None:
+    prefix = os.path.splitext(data_file)[0]
     with h5py.File(data_file, "r") as f:
         z = np.array(f["z"])
         V = np.array(f["V"])
@@ -32,11 +34,12 @@ def plot_data(data_file: str, nc: float = 0.0) -> None:
         # Add colorbar
         sm = cm.ScalarMappable(cmap=cmap, norm=normalize)
         sm.set_array([])
-        plt.colorbar(sm, label=r"Calculation index", ax=plt.gca())
+        plt.colorbar(sm, label=r"Calculation index", ax=plt.gca(), pad=0.15)
         # Plot external potential shape for comparison
         plt.sca(plt.gca().twinx())
         plt.plot(z, V[i_site], color="k", lw=1, ls="dashed")
         plt.ylabel(f"Site {i_site} applied potential shape")
+        plt.savefig(f"{prefix}-n{i_site}.pdf", bbox_inches="tight")
 
         # Plot potentials
         plt.figure()
@@ -52,7 +55,8 @@ def plot_data(data_file: str, nc: float = 0.0) -> None:
         # --- add colorbar
         sm = cm.ScalarMappable(cmap=cmap, norm=normalize)
         sm.set_array([])
-        plt.colorbar(sm, label=r"Calculation index", ax=plt.gca())
+        plt.colorbar(sm, label=r"Calculation index", ax=plt.gca(), pad=0.15)
+        plt.savefig(f"{prefix}-V{i_site}.pdf", bbox_inches="tight")
 
     if n_perts > 1:
         # Check E and dE_dn consistency:
