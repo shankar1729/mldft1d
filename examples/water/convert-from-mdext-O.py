@@ -27,7 +27,7 @@ bulk_ramp = 3.0  # in bohrs
 a_bulk = -0.000049418134  # bulk free energy density (with A_id := T n log n/n_unit)
 a_n_bulk = -0.009996667327  # density derivative in bulk condition
 mu = a_n_bulk
-print(f"mu = {mu:.3f} kcal/mol")
+print(f"mu = {mu/V_unit:.3f} kcal/mol")
 
 
 def get_data(prefix: str, lbda: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -118,7 +118,7 @@ def convert(src_path: str, out_file: str) -> None:
 
 
 def main() -> None:
-    for seed in range(288):
+    for seed in range(480):
         out_file = f"random-spce-O/random{seed}.h5"
         if os.path.isfile(out_file):
             print(f"Skipped {out_file} (already exists)")
