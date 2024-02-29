@@ -19,6 +19,7 @@ class Minimizer(Minimize[FieldR]):
     state_to_n: Callable  #: Mapping from independent-variable `state` to density `n`
     n_to_state: Callable  #: Mapping from density `n` to independent-variable `state`
     n_bulk: torch.Tensor  #: Bulk number densities (for each site)
+    fixed_number: bool  #: Fix particle number if True, else fix mu (default)
     mu: torch.Tensor  #: Bulk chemical potentials (for each site)
     V: FieldR  #: External potential (for each site)
     energy: Energy  #: Equilibrium energy components
@@ -30,6 +31,7 @@ class Minimizer(Minimize[FieldR]):
         grid1d: Grid1D,
         n_bulk: torch.Tensor,
         name: str,
+        fixed_number: bool = False,
         n_iterations: int = 1000,
         energy_threshold: float = 1e-9,
         grad_threshold: float = 1e-8,
@@ -50,7 +52,10 @@ class Minimizer(Minimize[FieldR]):
         self.functionals = functionals
         self.grid1d = grid1d
         self.n_bulk = n_bulk
-        self.mu = get_mu(functionals, n_bulk)
+        self.fixed_number = fixed_number
+        self.mu = (
+            torch.zeros_like(n_bulk) if fixed_number else get_mu(functionals, n_bulk)
+        )
         self.state = FieldR(
             grid1d.grid,
             data=torch.einsum(
@@ -65,7 +70,12 @@ class Minimizer(Minimize[FieldR]):
     @property
     def n(self) -> FieldR:
         """Get current density from `state`"""
-        return FieldR(self.grid1d.grid, data=self.state_to_n(self.state.data))
+        result = FieldR(self.grid1d.grid, data=self.state_to_n(self.state.data))
+        if self.fixed_number:
+            # Enforce average density = n_bulk:
+            scale = self.n_bulk * self.grid1d.L / result.integral()
+            result.data = result.data * scale.view(-1, 1, 1, 1)
+        return result
 
     @n.setter
     def n(self, n_in: FieldR) -> None:
