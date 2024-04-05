@@ -83,7 +83,7 @@ def run(
     # Get potential from specified data file or shape:
     if data_file:
         with h5py.File(data_file) as fp:
-            Vdata = torch.tensor(fp["V"])[:, None, None]
+            Vdata = torch.tensor(fp["V"], device=rc.device)[:, None, None]
     else:
         Vshape = [Vshape] if isinstance(Vshape, dict) else Vshape
         assert len(Vshape) == n_sites
@@ -112,7 +112,7 @@ def run(
     # Report final energies etc.:
     for dft_name, dft in dfts.items():
         E = float(dft.energy)
-        if isinstance(dft, hf.DFT):
+        if isinstance(dft, hf.DFT) and (n_bulk * L > 1):
             homo = dft.eig[dft.eig < dft.mu].max().item()
             lumo = dft.eig[dft.eig > dft.mu].min().item()
             gap = lumo - homo
@@ -215,8 +215,9 @@ def run(
                 if not dft.periodic:
                     eig = np.repeat(eig, 2, axis=0)
                 mu = dft.mu.item()
-                n_plot = np.max(np.where(eig < mu), axis=1)[1] + 4
-                plt.plot(k, eig[:, :n_plot] - mu, "-", color=color, label=dft_name)
+                plt.plot(k, eig - mu, "-", color=color, label=dft_name)
+                # n_plot = np.max(np.where(eig < mu), axis=1)[1] + 4
+                # plt.plot(k, eig[:, :n_plot] - mu, "-", color=color, label=dft_name)
             plt.xlabel("$k$")
             plt.ylabel(r"$\epsilon_{nk}-\mu$")
             plt.legend(
@@ -239,7 +240,8 @@ def run(
 
         rc.report_end()
         StopWatch.print_stats()
-        plt.show()
+        # plt.show()
+        plt.close()
 
 
 class DataDFT:
