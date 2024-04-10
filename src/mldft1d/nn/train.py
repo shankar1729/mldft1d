@@ -105,8 +105,8 @@ class Trainer(torch.nn.Module):  # type: ignore
             qp.rc.comm.Barrier()
             # Step using total gradient over batch:
             optimizer.zero_grad(set_to_none=False)
-            lossE_batch = None
-            lossV_batch = None
+            lossE_batch = torch.tensor(0.0, device=rc.device)
+            lossV_batch = torch.tensor(0.0, device=rc.device)
             for data in data_batch:
                 lossE, lossV = self(data)
                 lossE_batch = lossE if (lossE_batch is None) else (lossE_batch + lossE)
