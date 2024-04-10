@@ -80,18 +80,21 @@ class Trainer(torch.nn.Module):  # type: ignore
         # Compute energy and gradient errors:
         data.n.data.requires_grad = True
         data.n.data.grad = None
+        dz_inv = 1/data.grid1d.dz
+        Nz = data.grid1d.grid.shape[2]
         Eerr = self.functional.get_energy(data.n) - data.E
-        V = torch.autograd.grad(Eerr.sum(), data.n.data, create_graph=True)[0]
-        Verr = V - data.dE_dn.data * data.grid1d.dz  # error in partial derivative dE/dn
+        V = torch.autograd.grad(Eerr.sum(), data.n.data, create_graph=True)[0] * dz_inv
+        Verr = V - data.dE_dn.data
         if self.weight_nc:
             Verr *= 0.5 * torch.erfc(-torch.log(data.n.data / self.weight_nc))
-        return Eerr.square().sum(), Verr.square().sum()  # converted to MSE loss below
+        return Eerr.square().sum(), Verr.square().sum() / Nz  # converted to MSE loss below
 
     def train_loop(
         self,
         optimizer: torch.optim.Optimizer,
         batch_size: int,
-        energy_loss_scale: float = 1.0,
+        loss_scale_E: float = 1.0,
+        loss_scale_V: float = 1.0,
     ) -> tuple[float, float]:
         """Run training loop and return mean losses (over epoch)."""
         lossE_total = 0.0
@@ -109,7 +112,7 @@ class Trainer(torch.nn.Module):  # type: ignore
                 lossE_batch = lossE if (lossE_batch is None) else (lossE_batch + lossE)
                 lossV_batch = lossV if (lossV_batch is None) else (lossV_batch + lossV)
                 n_perturbations += data.n_perturbations
-            (lossE_batch * energy_loss_scale + lossV_batch).backward()
+            (lossE_batch * loss_scale_E**2 + lossV_batch * loss_scale_V**2).backward()
             lossE_total += lossE_batch.item()
             lossV_total += lossV_batch.item()
             self.functional.allreduce_parameters_grad(self.comm)
@@ -175,51 +178,51 @@ def run_training_loop(
     *,
     loss_curve: str,
     save_file: str,
-    save_interval: int,
     epochs: int,
     batch_size: int,
     method: str,
-    energy_loss_scale: float = 1.0,
+    loss_scale_E: float = 1.0,
+    loss_scale_V: float = 1.0,
     **method_kwargs,
 ) -> None:
     optimizer = get_optimizer(trainer.functional.parameters(), method, **method_kwargs)
     qp.log.info(f"Training for {epochs} epochs")
     lossE_test, lossV_test = trainer.test_loop()
-    best_loss_test = lossE_test * energy_loss_scale + lossV_test
+    best_lossEV_test = lossE_test * loss_scale_E**2 + lossV_test * loss_scale_V**2
     loss_history = np.zeros((epochs, 4))
     qp.log.info(
-        f"Initial  TestLoss: E: {lossE_test:>7f}  V: {lossV_test:>7f}"
+        f"Initial  TestLoss: E: {lossE_test:>7f}  V: {lossV_test:>7f}  EV: {best_lossEV_test:>7f}"
         f"  t[s]: {qp.rc.clock():.1f}"
     )
     for epoch in range(1, epochs + 1):
         lossE_train, lossV_train = trainer.train_loop(
-            optimizer, batch_size, energy_loss_scale=energy_loss_scale
+            optimizer, batch_size, loss_scale_E=loss_scale_E, loss_scale_V=loss_scale_V,
         )
         lossE_test, lossV_test = trainer.test_loop()
+        lossEV_train = lossE_train * loss_scale_E**2 + lossV_train * loss_scale_V**2
+        lossEV_test = lossE_test * loss_scale_E**2 + lossV_test * loss_scale_V**2
         loss_history[epoch - 1] = (lossE_train, lossV_train, lossE_test, lossV_test)
         qp.log.info(
             f"Epoch: {epoch:3d}"
-            f"  TrainLoss: E: {lossE_train:>7f}  V: {lossV_train:>7f}"
-            f"  TestLoss: E: {lossE_test:>7f}  V: {lossV_test:>7f}"
+            f"  TrainLoss: E: {lossE_train:>7f}  V: {lossV_train:>7f}  EV: {lossEV_train:>7f}"
+            f"  TestLoss: E: {lossE_test:>7f}  V: {lossV_test:>7f}  EV: {lossEV_test:>7f}"
             f"  t[s]: {qp.rc.clock():.1f}"
         )
-        if epoch % save_interval == 0:
-            np.savetxt(
-                loss_curve,
-                loss_history[:epoch],
-                header="TrainLossE TrainLossV TestLossE TestLossV",
-            )
+        np.savetxt(
+            loss_curve,
+            loss_history[:epoch],
+            header="TrainLossE TrainLossV TestLossE TestLossV",
+        )
 
-            # Save if weighted test loss combination decreased:
-            loss_test = lossE_test * energy_loss_scale + lossV_test
-            if loss_test < best_loss_test:
-                best_loss_test = loss_test
-                trainer.functional.save(save_file, trainer.comm)
-                qp.log.info(f"Saved parameters to '{save_file}'")
-            else:
-                qp.log.info(
-                    f"Skipped save because weighted TestLoss >= {best_loss_test} (best)"
-                )
+        # Save if weighted test loss combination decreased:
+        if lossEV_test < best_lossEV_test:
+            best_lossEV_test = lossEV_test
+            trainer.functional.save(save_file, trainer.comm)
+            qp.log.info(f"Saved parameters to '{save_file}'")
+        else:
+            qp.log.info(
+                f"Skipped save because TestLossEV >= {best_lossEV_test} (best)"
+            )
 
     qp.log.info("Done!")
 
