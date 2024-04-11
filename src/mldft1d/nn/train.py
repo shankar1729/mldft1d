@@ -102,11 +102,13 @@ class Trainer(torch.nn.Module):  # type: ignore
         n_perturbations = 0
         n_batches = qp.math.ceildiv(self.n_perturbations_train_tot, batch_size)
         for data_batch in random_batch_split(self.data_train, n_batches):
+            if len(data_batch) == 0:
+                continue
             qp.rc.comm.Barrier()
             # Step using total gradient over batch:
             optimizer.zero_grad(set_to_none=False)
-            lossE_batch = torch.tensor(0.0, device=qp.rc.device)
-            lossV_batch = torch.tensor(0.0, device=qp.rc.device)
+            lossE_batch = None
+            lossV_batch = None
             for data in data_batch:
                 lossE, lossV = self(data)
                 lossE_batch = lossE if (lossE_batch is None) else (lossE_batch + lossE)
