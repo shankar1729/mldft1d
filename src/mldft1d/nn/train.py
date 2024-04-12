@@ -206,8 +206,8 @@ def run_training_loop(
         loss_history[epoch - 1] = (lossE_train, lossV_train, lossE_test, lossV_test)
         qp.log.info(
             f"Epoch: {epoch:3d}"
-            f"  TrainLoss: E: {lossE_train:>7f}  V: {lossV_train:>7f}  EV: {lossEV_train:>7f}"
-            f"  TestLoss: E: {lossE_test:>7f}  V: {lossV_test:>7f}  EV: {lossEV_test:>7f}"
+            f"  TrainLoss: E: {np.sqrt(lossE_train):>7f}  V: {np.sqrt(lossV_train):>7f}  EV: {np.sqrt(lossEV_train):>7f}"
+            f"  TestLoss: E: {np.sqrt(lossE_test):>7f}  V: {np.sqrt(lossV_test):>7f}  EV: {np.sqrt(lossEV_test):>7f}"
             f"  t[s]: {qp.rc.clock():.1f}"
         )
         np.savetxt(
