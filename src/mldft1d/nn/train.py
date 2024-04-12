@@ -203,11 +203,13 @@ def run_training_loop(
         lossE_test, lossV_test = trainer.test_loop()
         lossEV_train = lossE_train * loss_scale_E**2 + lossV_train * loss_scale_V**2
         lossEV_test = lossE_test * loss_scale_E**2 + lossV_test * loss_scale_V**2
+        lossEV_train_sqrt = np.sqrt(lossE_train * loss_scale_E**2) + np.sqrt(lossV_train * loss_scale_V**2)
+        lossEV_test_sqrt = np.sqrt(lossE_test * loss_scale_E**2) + np.sqrt(lossV_test * loss_scale_V**2)
         loss_history[epoch - 1] = (lossE_train, lossV_train, lossE_test, lossV_test)
         qp.log.info(
             f"Epoch: {epoch:3d}"
-            f"  TrainLoss: E: {np.sqrt(lossE_train):>7f}  V: {np.sqrt(lossV_train):>7f}  EV: {np.sqrt(lossEV_train):>7f}"
-            f"  TestLoss: E: {np.sqrt(lossE_test):>7f}  V: {np.sqrt(lossV_test):>7f}  EV: {np.sqrt(lossEV_test):>7f}"
+            f"  TrainLoss: E: {np.sqrt(lossE_train):>7f}  V: {np.sqrt(lossV_train):>7f}  EV: {lossEV_train:>7f}"
+            f"  TestLoss: E: {np.sqrt(lossE_test):>7f}  V: {np.sqrt(lossV_test):>7f}  EV: {lossEV_test:>7f}"
             f"  t[s]: {qp.rc.clock():.1f}"
         )
         np.savetxt(
