@@ -192,7 +192,7 @@ def run(
                     for i_layer, layer in enumerate(functional.layers):
                         plt.figure()
                         w_tilde = layer.get_w_tilde(grid1d.grid, n_dim_tot=3)
-                        w = torch.fft.irfft(w_tilde).real / dz
+                        w = torch.fft.irfft(w_tilde, n=len(z1d)).real / dz
                         for w_i in w.detach().to(rc.cpu).flatten(0, 1).numpy():
                             is_even = np.abs(w_i[0]) > 1e-6 * np.max(np.abs(w_i))
                             plt.plot(z1d, w_i, color=("r" if is_even else "b"))
@@ -240,8 +240,8 @@ def run(
 
         rc.report_end()
         StopWatch.print_stats()
-        # plt.show()
-        plt.close()
+        plt.show()
+        # plt.close('all')
 
 
 class DataDFT:
