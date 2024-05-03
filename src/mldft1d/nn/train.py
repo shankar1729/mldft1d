@@ -152,7 +152,7 @@ def load_data(
     filenames: Union[str, Sequence[str]],
     train_fraction: float = 0.8,
     weight_nc: float = 0.0,
-    fuse_files: bool = False,
+    fuse_files: bool = True,
 ) -> Trainer:
     # Expand list of filenames:
     filenames = [filenames] if isinstance(filenames, str) else filenames
