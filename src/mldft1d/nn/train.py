@@ -206,12 +206,6 @@ def run_training_loop(
         lossEV_train_sqrt = np.sqrt(lossE_train * loss_scale_E**2) + np.sqrt(lossV_train * loss_scale_V**2)
         lossEV_test_sqrt = np.sqrt(lossE_test * loss_scale_E**2) + np.sqrt(lossV_test * loss_scale_V**2)
         loss_history[epoch - 1] = (lossE_train, lossV_train, lossE_test, lossV_test)
-        qp.log.info(
-            f"Epoch: {epoch:3d}"
-            f"  TrainLoss: E: {np.sqrt(lossE_train):>7f}  V: {np.sqrt(lossV_train):>7f}  EV: {lossEV_train:>7f}"
-            f"  TestLoss: E: {np.sqrt(lossE_test):>7f}  V: {np.sqrt(lossV_test):>7f}  EV: {lossEV_test:>7f}"
-            f"  t[s]: {qp.rc.clock():.1f}"
-        )
         np.savetxt(
             loss_curve,
             loss_history[:epoch],
@@ -222,11 +216,15 @@ def run_training_loop(
         if lossEV_test < best_lossEV_test:
             best_lossEV_test = lossEV_test
             trainer.functional.save(save_file, trainer.comm)
-            qp.log.info(f"Saved parameters to '{save_file}'")
+            save_str = "  (saved)"
         else:
-            qp.log.info(
-                f"Skipped save because TestLossEV >= {best_lossEV_test} (best)"
-            )
+            save_str = ""
+        qp.log.info(
+            f"Epoch: {epoch:3d}"
+            f"  TrainLoss: E: {np.sqrt(lossE_train):>7f}  V: {np.sqrt(lossV_train):>7f}  EV: {lossEV_train:>7f}"
+            f"  TestLoss: E: {np.sqrt(lossE_test):>7f}  V: {np.sqrt(lossV_test):>7f}  EV: {lossEV_test:>7f}"
+            f"  t[s]: {qp.rc.clock():.1f}{save_str}"
+        )
 
     qp.log.info("Done!")
 
