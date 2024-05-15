@@ -29,6 +29,7 @@ class Trainer(torch.nn.Module):  # type: ignore
         train_fraction: float,
         weight_nc: float,
         fuse_files: bool,
+        seed: int,
     ) -> None:
         super().__init__()
         self.comm = comm
@@ -39,7 +40,7 @@ class Trainer(torch.nn.Module):  # type: ignore
         n_train_tot = int(len(filenames) * train_fraction)
         n_test_tot = len(filenames) - n_train_tot
         filenames_train_all, filenames_test_all = random_split(
-            filenames, [n_train_tot, n_test_tot], seed=0
+            filenames, [n_train_tot, n_test_tot], seed=seed
         )
 
         # Split filenames within each set over MPI:
@@ -80,14 +81,17 @@ class Trainer(torch.nn.Module):  # type: ignore
         # Compute energy and gradient errors:
         data.n.data.requires_grad = True
         data.n.data.grad = None
-        dz_inv = 1/data.grid1d.dz
+        dz_inv = 1 / data.grid1d.dz
         Nz = data.grid1d.grid.shape[2]
         Eerr = self.functional.get_energy(data.n) - data.E
         V = torch.autograd.grad(Eerr.sum(), data.n.data, create_graph=True)[0] * dz_inv
         Verr = V - data.dE_dn.data
         if self.weight_nc:
             Verr *= 0.5 * torch.erfc(-torch.log(data.n.data / self.weight_nc))
-        return Eerr.square().sum(), Verr.square().sum() / Nz  # converted to MSE loss below
+        return (
+            Eerr.square().sum(),
+            Verr.square().sum() / Nz,
+        )  # converted to MSE loss below
 
     def train_loop(
         self,
@@ -114,7 +118,9 @@ class Trainer(torch.nn.Module):  # type: ignore
                 lossE_batch = lossE if (lossE_batch is None) else (lossE_batch + lossE)
                 lossV_batch = lossV if (lossV_batch is None) else (lossV_batch + lossV)
                 n_perturbations += data.n_perturbations
-            (lossE_batch * loss_scale_E**2 + lossV_batch * loss_scale_V**2).backward()
+            (
+                lossE_batch * loss_scale_E**2 + lossV_batch * loss_scale_V**2
+            ).backward()
             lossE_total += lossE_batch.item()
             lossV_total += lossV_batch.item()
             self.functional.allreduce_parameters_grad(self.comm)
@@ -153,6 +159,7 @@ def load_data(
     train_fraction: float = 0.8,
     weight_nc: float = 0.0,
     fuse_files: bool = True,
+    seed: int = 0,
 ) -> Trainer:
     # Expand list of filenames:
     filenames = [filenames] if isinstance(filenames, str) else filenames
@@ -163,7 +170,13 @@ def load_data(
 
     # Create trainer with specified functional and data split:
     return Trainer(
-        comm, functional, filenames_expanded, train_fraction, weight_nc, fuse_files
+        comm,
+        functional,
+        filenames_expanded,
+        train_fraction,
+        weight_nc,
+        fuse_files,
+        seed,
     )
 
 
@@ -198,12 +211,22 @@ def run_training_loop(
     )
     for epoch in range(1, epochs + 1):
         lossE_train, lossV_train = trainer.train_loop(
-            optimizer, batch_size, loss_scale_E=loss_scale_E, loss_scale_V=loss_scale_V,
+            optimizer,
+            batch_size,
+            loss_scale_E=loss_scale_E,
+            loss_scale_V=loss_scale_V,
         )
         lossE_test, lossV_test = trainer.test_loop()
         lossEV_train = lossE_train * loss_scale_E**2 + lossV_train * loss_scale_V**2
         lossEV_test = lossE_test * loss_scale_E**2 + lossV_test * loss_scale_V**2
-        loss_history[epoch - 1] = (lossE_train, lossV_train, lossEV_train, lossE_test, lossV_test, lossEV_test)
+        loss_history[epoch - 1] = (
+            lossE_train,
+            lossV_train,
+            lossEV_train,
+            lossE_test,
+            lossV_test,
+            lossEV_test,
+        )
         np.savetxt(
             loss_curve,
             loss_history[:epoch],
@@ -233,8 +256,9 @@ def run(
     functional: dict,
     data: dict,
     train: dict,
+    seed: int = 0,
 ) -> None:
-    torch.random.manual_seed(0)
+    torch.random.manual_seed(seed)
     trainer = load_data(
         comm,
         Functional.load(comm, **key_cleanup(functional)),
