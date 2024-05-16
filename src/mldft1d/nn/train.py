@@ -204,7 +204,7 @@ def run_training_loop(
     qp.log.info(f"Training for {epochs} epochs")
     lossE_test, lossV_test = trainer.test_loop()
     best_lossEV_test = lossE_test * loss_scale_E**2 + lossV_test * loss_scale_V**2
-    loss_history = np.zeros((epochs, 4))
+    loss_history = np.zeros((epochs, 6))
     qp.log.info(
         f"Initial  TestLoss: E: {lossE_test:>7f}  V: {lossV_test:>7f}  EV: {best_lossEV_test:>7f}"
         f"  t[s]: {qp.rc.clock():.1f}"
