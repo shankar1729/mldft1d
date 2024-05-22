@@ -29,6 +29,7 @@ class Trainer(torch.nn.Module):  # type: ignore
         train_fraction: float,
         weight_nc: float,
         fuse_files: bool,
+        batch_size: int,
         seed: int,
     ) -> None:
         super().__init__()
@@ -50,12 +51,12 @@ class Trainer(torch.nn.Module):  # type: ignore
         # Load and fuse training set:
         self.data_train = [Data(filename) for filename in filenames_train]
         if fuse_files:
-            self.data_train = fuse_data(self.data_train)
+            self.data_train = fuse_data(self.data_train, batch_size)
 
         # Load and fuse test set:
         self.data_test = [Data(filename) for filename in filenames_test]
         if fuse_files:
-            self.data_test = fuse_data(self.data_test)
+            self.data_test = fuse_data(self.data_test, batch_size)
 
         # Report loaded data:
         def report(name: str, data_set: Sequence[Data]) -> int:
@@ -159,6 +160,7 @@ def load_data(
     train_fraction: float = 0.8,
     weight_nc: float = 0.0,
     fuse_files: bool = True,
+    batch_size: int,
     seed: int = 0,
 ) -> Trainer:
     # Expand list of filenames:
@@ -176,6 +178,7 @@ def load_data(
         train_fraction,
         weight_nc,
         fuse_files,
+        batch_size,
         seed,
     )
 
@@ -206,8 +209,8 @@ def run_training_loop(
     best_lossEV_test = lossE_test * loss_scale_E**2 + lossV_test * loss_scale_V**2
     loss_history = np.zeros((epochs, 6))
     qp.log.info(
-        f"Initial  TestLoss: E: {lossE_test:>7f}  V: {lossV_test:>7f}  EV: {best_lossEV_test:>7f}"
-        f"  t[s]: {qp.rc.clock():.1f}"
+        f"Initial  TestLoss: E: {lossE_test:>7f}  V: {lossV_test:>7f}"
+        f"  EV: {best_lossEV_test:>7f}  t[s]: {qp.rc.clock():.1f}"
     )
     for epoch in range(1, epochs + 1):
         lossE_train, lossV_train = trainer.train_loop(
@@ -242,8 +245,10 @@ def run_training_loop(
             save_str = ""
         qp.log.info(
             f"Epoch: {epoch:3d}"
-            f"  TrainLoss: E: {np.sqrt(lossE_train):>7f}  V: {np.sqrt(lossV_train):>7f}  EV: {lossEV_train:>7f}"
-            f"  TestLoss: E: {np.sqrt(lossE_test):>7f}  V: {np.sqrt(lossV_test):>7f}  EV: {lossEV_test:>7f}"
+            f"  TrainLoss: E: {np.sqrt(lossE_train):>7f}  V: {np.sqrt(lossV_train):>7f}"
+            f"  EV: {lossEV_train:>7f}"
+            f"  TestLoss: E: {np.sqrt(lossE_test):>7f}  V: {np.sqrt(lossV_test):>7f}"
+            f"  EV: {lossEV_test:>7f}"
             f"  t[s]: {qp.rc.clock():.1f}{save_str}"
         )
 
@@ -259,12 +264,12 @@ def run(
     seed: int = 0,
 ) -> None:
     torch.random.manual_seed(seed)
-    trainer = load_data(
-        comm,
-        Functional.load(comm, **key_cleanup(functional)),
-        **key_cleanup(data),
-    )
-    run_training_loop(trainer, **key_cleanup(train))
+    functional = key_cleanup(functional)
+    train = key_cleanup(train)
+    data = key_cleanup(data)
+    data["batch_size"] = train["batch_size"]  # for fusing files appropriately
+    trainer = load_data(comm, Functional.load(comm, **functional), **data)
+    run_training_loop(trainer, **train)
 
 
 def main() -> None:

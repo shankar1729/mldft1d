@@ -59,22 +59,26 @@ class Data:
         return f"mldft1d.data.Data({L=:.2f}, {n_perturbations=}, {attrs=})"
 
 
-def fuse_data(data_arr: Sequence[Data]) -> List[Data]:
+def fuse_data(data_arr: Sequence[Data], batch_size: int) -> List[Data]:
     """Fuse entries with same grid and attrs into concatenated entries."""
     result = []
     remainder = data_arr
     while remainder:
-        # Find entries with same grid and n_bulk as first one:
+        # Find entries with same grid as first one:
         ref_grid1d = remainder[0].grid1d
         ref_attrs = remainder[0].attrs
         same_grid: List[Data] = []
         next_remainder: List[Data] = []
+        n_perts = 0
+        has_room = True
         for data in remainder:
-            (
-                same_grid
-                if ((data.grid1d is ref_grid1d) and (data.attrs == ref_attrs))
-                else next_remainder
-            ).append(data)
+            if has_room and (data.grid1d is ref_grid1d) and (data.attrs == ref_attrs):
+                same_grid.append(data)
+                n_perts += data.n_perturbations
+                if n_perts > batch_size:
+                    has_room = False  # batch size reached, don't fuse any more
+            else:
+                next_remainder.append(data)
         remainder = next_remainder
 
         # Combine those entries into a single data set:
