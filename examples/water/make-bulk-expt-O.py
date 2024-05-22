@@ -1,8 +1,8 @@
 import numpy as np
 import h5py
 
-n, a, a_n = np.loadtxt("../../../Water/a_ex.dat").T
-sel = np.where(np.logical_and(n >= 0.01, n <= 0.05))[0]
+n, a, a_n = np.loadtxt("/home/shankar/DFT/BEAST/MD/MD-SPCE-O/Bulk/a_ex.dat").T
+sel = np.where(np.logical_and(n >= 0.01, n <= 0.064))[0]
 np.random.shuffle(sel)  # randomize batching
 
 # Divide into batches
