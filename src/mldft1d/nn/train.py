@@ -50,13 +50,14 @@ class Trainer(torch.nn.Module):  # type: ignore
 
         # Load and fuse training set:
         self.data_train = [Data(filename) for filename in filenames_train]
+        fuse_limit = qp.math.ceildiv(batch_size, comm.size)
         if fuse_files:
-            self.data_train = fuse_data(self.data_train, batch_size)
+            self.data_train = fuse_data(self.data_train, fuse_limit)
 
         # Load and fuse test set:
         self.data_test = [Data(filename) for filename in filenames_test]
         if fuse_files:
-            self.data_test = fuse_data(self.data_test, batch_size)
+            self.data_test = fuse_data(self.data_test, fuse_limit)
 
         # Report loaded data:
         def report(name: str, data_set: Sequence[Data]) -> int:
