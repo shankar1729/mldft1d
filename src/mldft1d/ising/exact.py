@@ -119,8 +119,8 @@ class BulkExcess:
     T: float
     J: float
 
-    def get_energy_bulk(self, n_in: torch.Tensor) -> torch.Tensor:
-        n = n_in[..., 0]
+    def __call__(self, n: torch.Tensor) -> torch.Tensor:
+        """Underlying elementwise calculator prior to any dimension contractions."""
         e = np.exp(-self.J / self.T)
         f = e - 1
         E = 2 * n - 1 + torch.sqrt(1 + 4 * f * n * (1 - n))
@@ -128,3 +128,9 @@ class BulkExcess:
             n * torch.log(E.square() / (4 * n.square()))
             - torch.log(1 - n + E / (2 * e))
         )
+
+    def get_energy(self, n: FieldR) -> torch.Tensor:
+        return FieldR(n.grid, data=self(n.data)).integral().sum(dim=0)
+
+    def get_energy_bulk(self, n: torch.Tensor) -> torch.Tensor:
+        return self(n).sum(dim=-1)

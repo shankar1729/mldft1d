@@ -1,27 +1,35 @@
 n_bulk_range: [[0.001, 0.999]]
 
 functionals:
-  exact J/T=0.5:
+  exact T/J=2:
     ising-exact:
       J: -1.0
       T: 2.0
-  reduced J/T=0.5:
+  LDA T/J=2:
+    ising-lda:
+      J: -1.0
+      T: 2.0
+  reduced T/J=2:
     ising-ml:
       T: 2.0
       load_file: reduced/params.dat
-  universal J/T=0.5:
+  universal T/J=2:
     ising-ml:
       T: 2.0
       load_file: universal/params.dat
-  exact J/T=1.5:
+  exact T/J=1:
     ising-exact:
       J: -1.0
-      T: 0.6666667
-  reduced J/T=1.5:
+      T: 1.0
+  LDA T/J=1:
+    ising-lda:
+      J: -1.0
+      T: 1.0
+  reduced T/J=1:
     ising-ml:
-      T: 0.6666667
+      T: 1.0
       load_file: reduced/params.dat
-  universal J/T=1.5:
+  universal T/J=1:
     ising-ml:
-      T: 0.6666667
+      T: 1.0
       load_file: universal/params.dat

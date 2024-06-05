@@ -45,6 +45,7 @@ make_dft_map: dict[str, Callable[..., protocols.DFT]] = {
     "hf_lda": hf.make_dft.lda,
     "hf_ml": hf.make_dft.ml,
     "ising_exact": ising.make_dft.exact,
+    "ising_lda": ising.make_dft.lda,
     "ising_ml": ising.make_dft.ml,
     "data": make_dft_data,
 }  #: Recognized DFTs that can be loaded from YAML input
