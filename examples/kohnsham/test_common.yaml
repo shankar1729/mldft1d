@@ -8,8 +8,6 @@ functionals:
   ML-universal:
     kohnsham-ml:
       load_file: universal/params.dat
-      energy_threshold: 1.0e-5
   #ML-reduced:
     #kohnsham-ml:
       #load_file: reduced/params.dat
-      #energy_threshold: 1.0e-5

@@ -6,12 +6,12 @@ __all__ = [
     "protocols",
     "nn",
     "hardrods",
-    "kohnsham",
     "ising",
     "hf",
+    "kohnsham",
 ]
 
 
 from .grid1d import Grid1D, get1D, trapz
 from .minimizer import Minimizer
-from . import protocols, nn, hardrods, kohnsham, ising, hf
+from . import protocols, nn, hardrods, ising, hf, kohnsham
