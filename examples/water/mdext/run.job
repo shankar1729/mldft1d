@@ -1,0 +1,5 @@
+#!/bin/bash
+#SBATCH -n 1 -c 1 -t 2-0 --hint=nomultithread -o out.o%j
+
+module load venv/mdext
+python ../../spce.py $1

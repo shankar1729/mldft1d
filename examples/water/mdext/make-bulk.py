@@ -1,7 +1,7 @@
 import numpy as np
 import h5py
 
-n, a, a_n = np.loadtxt("/home/shankar/DFT/BEAST/MD/MD-SPCE-O/Bulk/a_ex.dat").T
+n, a, a_n = np.loadtxt("a_ex.dat").T
 sel = np.where(np.logical_and(n >= 0.01, n <= 0.064))[0]
 np.random.shuffle(sel)  # randomize batching
 
@@ -22,7 +22,7 @@ for i_batch, sel_i in enumerate(sel):
     ni = np.outer(n[sel_i], ones)
     dE_dn_i = np.outer(a_n[sel_i], ones)
     Ei = a[sel_i] * L
-    out_file = f"bulk-expt-O/bulk{i_batch}.h5"
+    out_file = f"Bulk/bulk{i_batch}.h5"
     with h5py.File(out_file, "w") as fp:
         fp["z"] = z
         fp["V"] = V[None]
