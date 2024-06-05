@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH -p phi -n 256 --hint=nomultithread -o generate_random.log
+#SBATCH -n 64 -c 1 --hint=nomultithread -o generate_random.log
 
-module load openmpi-gpu venv/qimpy
+module load openmpi venv/qimpy
 
 mpirun python generate_random.py

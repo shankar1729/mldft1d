@@ -22,4 +22,4 @@ functionals:
       load_file: universal/params.dat
   ML-reduced:
     hardrods-ml:
-      load_file: optimal/params.dat
+      load_file: reduced/params.dat
