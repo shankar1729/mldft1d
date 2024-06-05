@@ -1,0 +1,24 @@
+T: 0.5962  # 300 K in kcal/mol
+n_bulk: 0.0334  # in Angstrom^-3
+n_bulk_range: [[0.0, 0.063]]
+nc: 0.001
+
+Vshape:
+  shape: none
+
+functionals:
+  LDA:
+    numerical-lda:
+      fixed_number: yes
+      filename: ../mdext/a_ex.dat
+  MD:
+    data:
+      mu: 0.0
+  ML-universal:
+    hardrods-ml:
+      fixed_number: yes
+      load_file: ../universal/params.dat
+  ML-reduced:
+    hardrods-ml:
+      fixed_number: yes
+      load_file: ../reduced/params.dat

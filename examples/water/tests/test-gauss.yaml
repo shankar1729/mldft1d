@@ -1,0 +1,10 @@
+include: common.yaml
+
+data-file: data-gauss.h5
+lbda: 15.0  # scale on V stored within data-file
+
+functionals:
+  MD:
+    data:
+      filename: data-gauss.h5
+      i_data: 15

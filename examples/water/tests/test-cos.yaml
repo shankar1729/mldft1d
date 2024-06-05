@@ -1,0 +1,10 @@
+include: common.yaml
+
+data-file: data-cos.h5
+lbda: 10.0  # scale on V stored within data-file
+
+functionals:
+  MD:
+    data:
+      filename: data-cos.h5
+      i_data: 10
