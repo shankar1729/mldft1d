@@ -1,27 +1,27 @@
 n_bulk_range: [[0.001, 0.999]]
 
 functionals:
-  Exact-T0.6:
+  exact J/T=0.5:
     ising-exact:
       J: -1.0
-      T: 0.6
-  Exact-T1.2:
+      T: 2.0
+  reduced J/T=0.5:
+    ising-ml:
+      T: 2.0
+      load_file: reduced/params.dat
+  universal J/T=0.5:
+    ising-ml:
+      T: 2.0
+      load_file: universal/params.dat
+  exact J/T=1.5:
     ising-exact:
       J: -1.0
-      T: 1.2
-  Exact-T1.8:
-    ising-exact:
-      J: -1.0
-      T: 1.8
-  ML-T0.6:
+      T: 0.6666667
+  reduced J/T=1.5:
     ising-ml:
-      T: 0.6
-      load_file: gaussian/params.dat
-  ML-T1.2:
+      T: 0.6666667
+      load_file: reduced/params.dat
+  universal J/T=1.5:
     ising-ml:
-      T: 1.2
-      load_file: gaussian/params.dat
-  ML-T1.8:
-    ising-ml:
-      T: 1.8
-      load_file: gaussian/params.dat
+      T: 0.6666667
+      load_file: universal/params.dat

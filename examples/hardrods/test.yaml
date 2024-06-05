@@ -17,6 +17,9 @@ functionals:
   Exact:
     hardrods-exact:
       R: 0.5
-  ML-gaussian:
+  ML-universal:
     hardrods-ml:
-      load_file: gaussian/params.dat
+      load_file: universal/params.dat
+  ML-reduced:
+    hardrods-ml:
+      load_file: optimal/params.dat
