@@ -1,0 +1,17 @@
+a: 1.0
+
+functionals:
+  LDA:
+    hf-lda:
+      T: 0.01  # for include mechanism, need non-null dictionary
+  exact:
+    hf_exact:
+      T: 0.01
+  ML-universal:
+    hf_ml:
+      T: 0.01
+      load_file: ../universal/params.dat
+  ML-reduced:
+    hf_ml:
+      T: 0.01
+      load_file: ../reduced/params.dat

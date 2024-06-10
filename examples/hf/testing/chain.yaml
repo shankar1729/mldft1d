@@ -1,0 +1,13 @@
+L: $lat_a
+dz: 0.05
+n_bulk: $n_a
+periodic: True
+
+nuclei:
+  positions: [0]
+  charges: [$Z]
+
+lbda: 0.0
+Vshape: {shape: none}
+
+include: test_common.yaml
