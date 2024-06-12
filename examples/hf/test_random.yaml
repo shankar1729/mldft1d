@@ -9,4 +9,18 @@ Vshape:
   seed: 1
   sigma: 1.0
 
-include: test_common.yaml
+a: 1.0
+nc: 0.01
+
+functionals:
+  LDA:
+    hf-lda:
+      T: 0.01  # for include mechanism, need non-null dictionary
+  exact:
+    hf_exact:
+      T: 0.01
+  #ML-nn:
+ #   hf_ml:
+  #    T: 0.01
+ #     load_file: nn/params.dat
+#include: test_common.yaml

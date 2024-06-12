@@ -1,0 +1,13 @@
+L: 40.0
+dz: 0.1
+n_bulk: 0.05
+periodic: True
+
+nuclei:
+  positions: [$p1, $p2]
+  charges: [1,1]
+
+lbda: 0.0
+Vshape: {shape: none}
+
+include: test_common.yaml

@@ -1,3 +1,5 @@
+include: ../train-common.yaml
+
 functional:
   load-file: params.dat
   layers:
@@ -5,24 +7,23 @@ functional:
     weight-functions: {type: gaussian, sigma_max: 4.0, degree: 1}
   - n-out: [10, 10]
     weight-functions: {type: gaussian, sigma_max: 4.0, degree: 1}
-  - n-out: [20, 0]
+  - n-out: [20, 00]
     weight-functions: {type: gaussian, sigma_max: 4.0, degree: 1}
-  readout: [100, 100, 100]
+  readout: [100, 100, 100]  
   wda: yes
 
 data:
-  filenames: ../random_*/*.h5
   train-fraction: 0.8
   weight-nc: 0.01
+  fuse-files: yes
+  filenames: ../random_*/*.h5
 
 train:
-  loss-curve: loss.dat
-  save-file: params.dat
-  save-interval: 20
-  epochs: 1000
+  epochs: 2000
   batch-size: 400
-  energy-loss-scale: 1.0
-  method: AdamW
+  loss_scale_E: 1.0
+  loss_scale_V : 1.0
+  method: Adam
   lr: 1.0E-3
-  weight-decay: 1.0E-2
+  weight-decay: 1.0E-3
   foreach: no  # to circumvent bug in Adam in pytorch 2.1
