@@ -1,7 +1,9 @@
 functional:
   load-file: params.dat
   layers:
-  - n-out: [10, 0]
+  - n-out: [2, 2]
+    weight-functions: {type: gaussian, sigma_max: 1.0, degree: 1}
+  - n-out: [4, 0]
     weight-functions: {type: gaussian, sigma_max: 1.0, degree: 1}
   readout: [30, 30, 30]
   wda: yes
