@@ -19,7 +19,9 @@ class Grid1D:
         The grid is split over MPI if `parallel` = True.
         """
         self.L = L
-        self.lattice = qp.lattice.Lattice(system="orthorhombic", a=1.0, b=1.0, c=L)
+        self.lattice = qp.lattice.Lattice(
+            system=dict(name="orthorhombic", a=1.0, b=1.0, c=L)
+        )
         symmetries = qp.symmetries.Symmetries(
             lattice=self.lattice,
             axes={"V": np.array((0.0, 0.0, 1.0))},
