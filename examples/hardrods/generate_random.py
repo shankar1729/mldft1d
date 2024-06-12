@@ -18,7 +18,7 @@ batch(
     n_bulk=uniform(loc=0.1, scale=0.7),  # Note that n_bulk must be < 1
     Vshape=dict(
         shape="random",
-        sigma=uniform(loc=0.2, scale=2.0),
+        sigma=uniform(loc=0.1, scale=2.0),
         seed=randint(1, np.iinfo(np.int32).max),
     ),
     lbda=dict(min=0.0, max=5.0, step=0.5),  # Make sure some perturbing V >> T
