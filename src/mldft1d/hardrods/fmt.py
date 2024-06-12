@@ -3,6 +3,7 @@ from typing import Union, Sequence
 from dataclasses import dataclass
 
 import torch
+import numpy as np
 
 from qimpy import rc
 from qimpy.grid import FieldR
@@ -33,7 +34,7 @@ class FMT:
         R_bcast = self.R.view(-1, 1, 1, 1)  # add dims to broadcast with Gmag
         GR = grid1d.Gmag * R_bcast
         self.w0_tilde = 2 * GR.cos()  # FT of w0(x) = delta(R-x)
-        self.w1_tilde = 2 * R_bcast * GR.sinc()  # FT of w1(x) = theta(R-x)
+        self.w1_tilde = 2 * R_bcast * (GR / np.pi).sinc()  # FT of w1(x) = theta(R-x)
 
     def get_energy(self, n: FieldR) -> torch.Tensor:
         T = self.f_bulk.T
