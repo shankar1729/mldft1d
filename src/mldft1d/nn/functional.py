@@ -41,7 +41,7 @@ class Functional(torch.nn.Module):  # type: ignore
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
-
+        print("On 1d-altconv branch")
         # Setup scalar attributes:
         self.attr_names = tuple(attr_names)
         if attrs is None:
