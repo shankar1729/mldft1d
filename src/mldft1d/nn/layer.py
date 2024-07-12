@@ -2,7 +2,8 @@ from __future__ import annotations
 from functools import cache
 
 import torch
-
+from torch.nn.parameter import Parameter
+import qimpy as qp
 from qimpy.grid import Grid, FieldR
 from qimpy.io.dict import key_cleanup
 from .weight_functions import WeightFunctions, make_weight_functions
@@ -28,7 +29,7 @@ class Layer(torch.nn.Module):  # type: ignore
         self.n_out = n_out
         self.weight_functions = make_weight_functions(
             **key_cleanup(weight_functions),
-            n_functions=sum(n_in) * sum(n_out),
+            n_functions=sum(n_out),
         )
 
     def asdict(self) -> dict:
@@ -44,20 +45,27 @@ class Layer(torch.nn.Module):  # type: ignore
         Optionally, suppress local/gradient contributions for plotting.
         """
         Gz = self.Gz(grid)
-        w_tilde = self.weight_functions(Gz).unflatten(0, (sum(self.n_in), -1))
+        w_tilde = self.weight_functions(Gz).unflatten(0, (sum(self.n_out), -1))
         w_tilde = w_tilde.to(torch.complex128)  # to accommodate odd weights
 
         # Add gradient term to make odd weight functions odd:
-        n_in_even = self.n_in[0]
         n_out_even = self.n_out[0]
         iGz = 1j * Gz
-        w_tilde[:n_in_even, n_out_even:] *= iGz  # even in, odd out
-        w_tilde[n_in_even:, :n_out_even] *= iGz  # odd in, even out
+        w_tilde[n_out_even:] *= iGz  # second half of vector is odd
         return w_tilde.unflatten(-1, (1,) * (n_dim_tot - 3) + (-1,))  # Singleton dims
 
     def compute(self, n: FieldR) -> FieldR:
         w_tilde = self.get_w_tilde(n.grid, len(n.data.shape) + 1)
-        return n.convolve(w_tilde, "i..., iw... -> w...")
+        conv_ab = n.convolve(w_tilde, "i..., w... -> iw...")
+        coeff_reduce = torch.Tensor(
+            Parameter(torch.empty((sum(self.n_in),), device=qp.rc.device))
+        )
+        # check1 = n.convolve(w_tilde, "i..., iw... -> w...")
+        # check2 = conv_ab.dot(coeff_reduce)
+        # print("CHECKS:", type(check1), type(check2), type(w_tilde), type(conv_ab), type(coeff_reduce))
+        return torch.einsum("i...,iw... -> w...", coeff_reduce, conv_ab.data)
+        # return conv_ab.dot(coeff_reduce)
+        # return n.convolve(w_tilde, "i..., iw... -> w...")
 
     @cache
     def Gz(self, grid: Grid) -> torch.Tensor:
