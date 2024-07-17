@@ -14,29 +14,56 @@ class Layer(torch.nn.Module):  # type: ignore
 
     n_in: tuple[int, int]  #: Number of even and odd input channels to layer
     n_out: tuple[int, int]  #: Number of even and odd output channels from layer
+    n_weights: tuple[int, int]  #: Number of even and odd weight functions in layer
     weight_functions: WeightFunctions  #: Trainable weight functions
+    Weee: torch.Tensor
+    Weoo: torch.Tensor
+    Wooe: torch.Tensor
+    Woeo: torch.Tensor
 
     def __init__(
         self,
         *,
         n_in: tuple[int, int],
         n_out: tuple[int, int],
+        n_weights: tuple[int, int],
         weight_functions: dict,
     ) -> None:
         """Initializes functional with specified sizes (and random parameters)."""
         super().__init__()
         self.n_in = n_in
         self.n_out = n_out
+        self.n_weights = n_weights
         self.weight_functions = make_weight_functions(
             **key_cleanup(weight_functions),
-            n_functions=sum(n_out),
+            n_functions=sum(n_weights),
         )
+        self.Weee = Parameter(
+            torch.empty((n_out[0], n_weights[0], n_in[0]), device=qp.rc.device)
+        )
+        self.Weoo = Parameter(
+            torch.empty((n_out[0], n_weights[1], n_in[1]), device=qp.rc.device)
+        )
+        self.Wooe = Parameter(
+            torch.empty((n_out[1], n_weights[1], n_in[0]), device=qp.rc.device)
+        )
+        self.Woeo = Parameter(
+            torch.empty((n_out[1], n_weights[0], n_in[1]), device=qp.rc.device)
+        )
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        torch.nn.init.uniform_(self.Weee, -1.0, 1.0)
+        torch.nn.init.uniform_(self.Weoo, -1.0, 1.0)
+        torch.nn.init.uniform_(self.Woeo, -1.0, 1.0)
+        torch.nn.init.uniform_(self.Wooe, -1.0, 1.0)
 
     def asdict(self) -> dict:
         """Serialize parameters to dict."""
         return dict(
             n_in=self.n_in,
             n_out=self.n_out,
+            n_weights=self.n_weights,
             weight_functions=self.weight_functions.asdict(),
         )
 
@@ -45,27 +72,28 @@ class Layer(torch.nn.Module):  # type: ignore
         Optionally, suppress local/gradient contributions for plotting.
         """
         Gz = self.Gz(grid)
-        w_tilde = self.weight_functions(Gz).unflatten(0, (sum(self.n_out), -1))
-        w_tilde = w_tilde.to(torch.complex128)  # to accommodate odd weights
+        w_tilde = self.weight_functions(Gz).to(
+            torch.complex128
+        )  # to accommodate odd weights
 
         # Add gradient term to make odd weight functions odd:
-        n_out_even = self.n_out[0]
+        n_weights_even = self.n_weights[0]
         iGz = 1j * Gz
-        w_tilde[n_out_even:] *= iGz  # second half of vector is odd
-        return w_tilde.unflatten(-1, (1,) * (n_dim_tot - 3) + (-1,))  # Singleton dims
+        w_tilde[n_weights_even:] *= iGz  # second half of vector is odd
+        return w_tilde.unflatten(-1, (1,) * (n_dim_tot - 2) + (-1,))  # Singleton dims
 
     def compute(self, n: FieldR) -> FieldR:
-        w_tilde = self.get_w_tilde(n.grid, len(n.data.shape) + 1)
+        n_out = self.n_out
+        n_in = self.n_in
+        n_weights = self.n_weights
+        w_tilde = self.get_w_tilde(n.grid, len(n.data.shape))
         conv_ab = n.convolve(w_tilde, "i..., w... -> iw...")
-        coeff_reduce = torch.Tensor(
-            Parameter(torch.empty((sum(self.n_in),), device=qp.rc.device))
-        )
-        # check1 = n.convolve(w_tilde, "i..., iw... -> w...")
-        # check2 = conv_ab.dot(coeff_reduce)
-        # print("CHECKS:", type(check1), type(check2), type(w_tilde), type(conv_ab), type(coeff_reduce))
-        return torch.einsum("i...,iw... -> w...", coeff_reduce, conv_ab.data)
-        # return conv_ab.dot(coeff_reduce)
-        # return n.convolve(w_tilde, "i..., iw... -> w...")
+        W = torch.zeros((sum(n_out), sum(n_weights), sum(n_in)))
+        W[: n_out[0], : n_weights[0], : n_in[0]] = self.Weee
+        W[: n_out[0], n_weights[0] :, n_in[0] :] = self.Weoo
+        W[n_out[0] :, n_weights[0] :, : n_in[0]] = self.Wooe
+        W[n_out[0] :, : n_weights[0], n_in[0] :] = self.Woeo
+        return FieldR(n.grid, data=torch.einsum("owi,iw... -> o...", W, conv_ab.data))
 
     @cache
     def Gz(self, grid: Grid) -> torch.Tensor:
