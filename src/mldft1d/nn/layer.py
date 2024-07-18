@@ -88,7 +88,7 @@ class Layer(torch.nn.Module):  # type: ignore
         n_weights = self.n_weights
         w_tilde = self.get_w_tilde(n.grid, len(n.data.shape))
         conv_ab = n.convolve(w_tilde, "i..., w... -> iw...")
-        W = torch.zeros((sum(n_out), sum(n_weights), sum(n_in)))
+        W = torch.zeros((sum(n_out), sum(n_weights), sum(n_in)), device=qp.rc.device)
         W[: n_out[0], : n_weights[0], : n_in[0]] = self.Weee
         W[: n_out[0], n_weights[0] :, n_in[0] :] = self.Weoo
         W[n_out[0] :, n_weights[0] :, : n_in[0]] = self.Wooe
